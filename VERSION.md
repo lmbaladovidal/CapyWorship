@@ -4,9 +4,28 @@ Este archivo registra el control de versiones, cambios granulares, mejoras y cor
 
 ---
 
-## 📌 Versión Actual: `v2.0.0` (Build 20261112.1)
+## 📌 Versión Actual: `v2.1.0` (Build 20261115.1)
 
 ### 🗓️ Registro de Cambios (Changelog Histórico)
+
+### [2.1.0] - 2026-11-15
+#### ✨ Mejoras de Proyección, Templates de Versículos, Rendimiento de Medios y Estabilidad UI
+- **Templates Independientes para Versículos (Escrituras):**
+  - Biblioteca propia `scriptureTemplates` separada de los templates de canciones/shows (`Versículo Moderno`, `Versículo Inferior`, `Versículo Clásico`, más creación/edición/eliminación personalizada).
+  - Selector rápido **Template de Versículo** en *Ajustes de Escrituras* y conmutador **Canciones | Versículos** en la pestaña *Templates*.
+- **Videos en Modo *Fit* y Pantalla Negra en Reposo:**
+  - Cambio a `object-fit: contain` en Audiencia y vista previa del operador para mostrar videos verticales completos sin recortes.
+  - Fondo `#000000` (negro puro) cuando no hay medios proyectándose en lugar del degradado azul previo.
+- **Transición *Cut* Instantánea en Videos:**
+  - Aplicación de `transition: none` con reflujo inmediato (`offsetWidth`) y corte sin espera en Audiencia y operador.
+- **Caché Persistente por Lotes de Miniaturas y Arranque Rápido:**
+  - Hidratación en una sola transacción IndexedDB (`getAllThumbnailsMap()` + `hydrateMediaThumbnailsBatch()`) sin crear elementos `<video>` ni regenerar miniaturas en cada inicio.
+- **Carpetas de Medios & Importación PowerPoint/PDF:**
+  - Posibilidad de eliminar cualquier carpeta virtual de medios, incluida `"General"`.
+  - Al importar presentaciones `.pptx`/`.pdf`, se cargan en el espacio de trabajo sin auto-proyectarse en vivo.
+- **Estabilidad de Modales y Foco en Textboxes:**
+  - Clic fuera de cualquier ventana modal ya no la cierra accidentalmente.
+  - Eliminación de `webContents.focus()` en eventos de clic y adición de gestor universal de foco para inputs y textboxes.
 
 ### [2.0.0] - 2026-11-12
 #### 🎨 Rediseño Visual Completo & Experiencia de Usuario Profesional

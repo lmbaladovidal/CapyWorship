@@ -62,11 +62,13 @@ class ProPresenterApp {
 
     window.closeAllModals = () => this.closeAllModals();
     this.initDOM();
+    this.templateScope = 'songs';
     this.bindEvents();
     this.initModalBackdropListeners();
     this.initUniversalInputFocusHandler();
     this.initKeyboardShortcuts();
     this.bindContextMenuEvents();
+    this._mediaThumbHydrationPromise = this.initMediaCacheHydration();
     this.initPhysicalFoldersSync();
 
     // Subscribe to state changes and sync displays
@@ -369,7 +371,9 @@ class ProPresenterApp {
         } else if (resType === 'templates') {
           document.getElementById('res-tab-templates')?.classList.add('active');
           document.getElementById('sub-sidebar-templates')?.classList.add('active');
-          this.populateTemplateForm(store.state.activeTemplate);
+          this.populateTemplateForm(
+            this.templateScope === 'scripture' ? store.state.activeScriptureTemplate : store.state.activeTemplate
+          );
         } else if (resType === 'scripture') {
           document.getElementById('res-tab-scripture')?.classList.add('active');
           document.getElementById('sub-sidebar-scripture')?.classList.add('active');
@@ -910,7 +914,7 @@ class ProPresenterApp {
             let thumb = null;
             try {
               thumb = await MediaCache.generateThumbnail(fileUrl, mediaType);
-              if (thumb) await MediaCache.saveThumbnail(id, thumb);
+              if (thumb) await MediaCache.saveThumbnailForItem({ id, filePath, url: fileUrl }, thumb);
             } catch (err) {}
 
             return {
@@ -1900,8 +1904,7 @@ class ProPresenterApp {
         if (modal) modal.classList.remove('open');
         resetModalForm();
 
-        // Proyectar inmediatamente la primera diapositiva de la presentación
-        store.setLiveSlide(0, 0);
+        // No proyectar automáticamente al importar: queda cargado en el espacio de trabajo listo para que el operador haga clic
         const slideTotal = deck.groups.reduce((acc, g) => acc + g.slides.length, 0);
         this.showToast(`Presentación "${deck.title}" importada (${slideTotal} diapositivas listas para proyectar).`, 'success');
       } catch (err) {
@@ -3169,15 +3172,31 @@ class ProPresenterApp {
     }).join('');
   }
 
+  async initMediaCacheHydration() {
+    try {
+      const thumbMap = await MediaCache.getAllThumbnailsMap();
+      this._cachedThumbMap = thumbMap;
+      if (thumbMap && thumbMap.size > 0) {
+        store.hydrateMediaThumbnailsBatch(thumbMap);
+      }
+    } catch (err) {
+      console.warn("Error hidratando caché de miniaturas:", err);
+    } finally {
+      this._mediaCacheHydrated = true;
+    }
+  }
+
   async initPhysicalFoldersSync() {
     if (!window.electronAPI) return;
 
     if (window.electronAPI.onPhysicalFolderUpdated) {
-      window.electronAPI.onPhysicalFolderUpdated((payload) => {
+      window.electronAPI.onPhysicalFolderUpdated(async (payload) => {
         const folderPath = payload?.path || payload?.folderPath;
         const folderName = payload?.name || payload?.folderName;
         if (folderPath) {
           store.syncPhysicalFolderItems(folderPath, folderName, payload.files || []);
+          const thumbMap = this._cachedThumbMap || await MediaCache.getAllThumbnailsMap();
+          store.hydrateMediaThumbnailsBatch(thumbMap);
         }
       });
     }
@@ -3196,6 +3215,12 @@ class ProPresenterApp {
               store.syncPhysicalFolderItems(fPath, fName, folderData.files || []);
             }
           });
+          if (this._mediaThumbHydrationPromise) {
+            await this._mediaThumbHydrationPromise;
+          }
+          if (this._cachedThumbMap && this._cachedThumbMap.size > 0) {
+            store.hydrateMediaThumbnailsBatch(this._cachedThumbMap);
+          }
         }
       } catch (err) {
         console.warn("Error al sincronizar carpetas físicas al iniciar:", err);
@@ -3823,13 +3848,12 @@ class ProPresenterApp {
         ${folders.map(folder => {
           const count = state.mediaLibrary.filter(m => m.folder === folder && !m.isPhysicalFolderItem).length;
           const isActive = this.selectedMediaFolder === folder;
-          const isGeneral = folder === 'General';
           return `
             <div class="folder-item ${isActive ? 'active' : ''}" data-folder-name="${folder}" title="Carpeta Virtual: ${folder}">
               <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;">${iconSvg('folder', { size: 13, className: 'lucide-icon icon-cyan' })} ${folder}</span>
               <div style="display: flex; align-items: center; gap: 6px;">
                 <span class="count">${count}</span>
-                ${!isGeneral ? `<button class="btn-delete-folder" data-folder="${folder}" title="Eliminar carpeta virtual" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 0 4px; display: inline-flex; align-items: center; opacity: 0.6; transition: opacity 0.2s;">${iconSvg('trash-2', { size: 13, color: '#ef4444' })}</button>` : ''}
+                <button class="btn-delete-folder" data-folder="${folder}" title="Eliminar carpeta virtual" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 0 4px; display: inline-flex; align-items: center; opacity: 0.6; transition: opacity 0.2s;">${iconSvg('trash-2', { size: 13, color: '#ef4444' })}</button>
               </div>
             </div>
           `;
@@ -3863,9 +3887,14 @@ class ProPresenterApp {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const folderToDelete = btn.getAttribute('data-folder');
-          if (confirm(`¿Estás seguro de eliminar la carpeta virtual "${folderToDelete}"? Los medios asignados pasarán a la carpeta General.`)) {
+          const remainingFolders = (store.state.mediaFolders || []).filter(f => f !== folderToDelete);
+          const nextFolder = remainingFolders[0] || (physicalFolders[0] ? `phys:${physicalFolders[0].path}` : '');
+          const msg = remainingFolders.length > 0
+            ? `¿Estás seguro de eliminar la carpeta virtual "${folderToDelete}"? Los medios asignados pasarán a "${remainingFolders[0]}".`
+            : `¿Estás seguro de eliminar la última carpeta virtual "${folderToDelete}"? Se quitarán los medios virtuales de esa carpeta.`;
+          if (confirm(msg)) {
             if (this.selectedMediaFolder === folderToDelete) {
-              this.selectedMediaFolder = 'General';
+              this.selectedMediaFolder = nextFolder;
             }
             store.deleteMediaFolder(folderToDelete);
           }
@@ -3952,7 +3981,7 @@ class ProPresenterApp {
             ? `<img class="video-card-thumb" src="${thumbSrc}" alt="${item.name}" loading="lazy" />`
             : (isImg 
                 ? `<img class="video-card-thumb" data-src="${item.url}" alt="${item.name}" />`
-                : `<video data-src="${item.url}" muted preload="metadata" playsinline></video>`);
+                : `<div class="video-card-thumb" style="background: #0f172a; display: flex; align-items: center; justify-content: center;">${iconSvg('film', { size: 22, color: 'rgba(56,189,248,0.4)' })}</div>`);
 
           const typeBadge = isImg 
             ? `<span class="video-card-type-badge img-badge">${iconSvg('image', { size: 11, className: 'lucide-icon' })} IMG</span>`
@@ -3991,22 +4020,28 @@ class ProPresenterApp {
           `;
         }).join('');
 
-        // Disparar generación o recuperación de miniaturas en segundo plano con cola de concurrencia limitada
-        filteredMedia.forEach(item => {
-          if (!item.thumbnail && item.url) {
-            MediaCache.getThumbnail(item.id).then(cached => {
-              if (cached) {
-                store.updateMediaItemThumbnail(item.id, cached);
-              } else {
-                MediaCache.enqueueThumbnailGeneration(item.id, item.url, item.type).then(newThumb => {
-                  if (newThumb) {
-                    MediaCache.saveThumbnail(item.id, newThumb);
-                    store.updateMediaItemThumbnail(item.id, newThumb);
-                  }
-                }).catch(() => {});
-              }
-            }).catch(() => {});
-          }
+        // Esperar a la hidratación por lotes desde IndexedDB antes de encolar generación de miniaturas nuevas
+        Promise.resolve(this._mediaThumbHydrationPromise).then(() => {
+          filteredMedia.forEach(item => {
+            if (!item.thumbnail && item.url) {
+              const stableKey = item.filePath || item.url || '';
+              MediaCache.getThumbnail(item.id, stableKey).then(cached => {
+                if (cached) {
+                  store.updateMediaItemThumbnail(item.id, cached);
+                } else {
+                  MediaCache.enqueueThumbnailGeneration(item.id, item.url, item.type).then(newThumb => {
+                    const finalThumb = newThumb || MediaCache.getFallbackVideoThumb();
+                    MediaCache.saveThumbnailForItem(item, finalThumb);
+                    if (this._cachedThumbMap) {
+                      this._cachedThumbMap.set(item.id, finalThumb);
+                      if (stableKey) this._cachedThumbMap.set(stableKey, finalThumb);
+                    }
+                    store.updateMediaItemThumbnail(item.id, finalThumb);
+                  }).catch(() => {});
+                }
+              }).catch(() => {});
+            }
+          });
         });
 
         // Setup IntersectionObserver for Lazy Media Loading in Grid
@@ -4191,19 +4226,52 @@ class ProPresenterApp {
     });
   }
 
+  setTemplateScope(scope) {
+    this.templateScope = scope === 'scripture' ? 'scripture' : 'songs';
+    const btnSongs = document.getElementById('btn-tpl-scope-songs');
+    const btnScripture = document.getElementById('btn-tpl-scope-scripture');
+    if (btnSongs) {
+      const isSongs = this.templateScope === 'songs';
+      btnSongs.classList.toggle('active', isSongs);
+      btnSongs.style.background = isSongs ? 'rgba(236, 72, 153, 0.16)' : 'transparent';
+      btnSongs.style.borderColor = isSongs ? 'rgba(236, 72, 153, 0.5)' : 'var(--border-color)';
+      btnSongs.style.color = isSongs ? '#fff' : 'var(--text-muted)';
+    }
+    if (btnScripture) {
+      const isSc = this.templateScope === 'scripture';
+      btnScripture.classList.toggle('active', isSc);
+      btnScripture.style.background = isSc ? 'rgba(56, 189, 248, 0.18)' : 'transparent';
+      btnScripture.style.borderColor = isSc ? 'rgba(56, 189, 248, 0.5)' : 'var(--border-color)';
+      btnScripture.style.color = isSc ? '#fff' : 'var(--text-muted)';
+    }
+    const previewSample = document.getElementById('template-preview-text');
+    if (previewSample) {
+      previewSample.textContent = this.templateScope === 'scripture'
+        ? 'Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito...'
+        : 'Cuan grande es Él, cantará mi corazón...';
+    }
+    this.lastTemplatesCacheKey = null;
+    this.renderTemplatesSidebar(store.state);
+    this.populateTemplateForm(
+      this.templateScope === 'scripture' ? store.state.activeScriptureTemplate : store.state.activeTemplate
+    );
+  }
+
   renderTemplatesSidebar(state) {
     const sidebarEl = document.getElementById('template-list-sidebar');
     if (!sidebarEl) return;
 
-    const templates = store.templates || [];
-    const tplCacheKey = JSON.stringify(templates.map(t => t.id + t.name)) + '|' + store.activeTemplateId;
+    const isScripture = this.templateScope === 'scripture';
+    const templates = isScripture ? (store.scriptureTemplates || []) : (store.templates || []);
+    const activeId = isScripture ? store.activeScriptureTemplateId : store.activeTemplateId;
+    const tplCacheKey = this.templateScope + '|' + JSON.stringify(templates.map(t => t.id + t.name)) + '|' + activeId;
     if (this.lastTemplatesCacheKey === tplCacheKey) return;
     this.lastTemplatesCacheKey = tplCacheKey;
     sidebarEl.innerHTML = templates.map(tpl => {
-      const isActive = tpl.id === store.activeTemplateId;
+      const isActive = tpl.id === activeId;
       return `
         <div class="folder-item ${isActive ? 'active' : ''}" data-tpl-id="${tpl.id}">
-          <span class="filter-item-label">${iconSvg('file-text', { size: 13, className: 'lucide-icon icon-pink' })} <span>${tpl.name}</span></span>
+          <span class="filter-item-label">${iconSvg(isScripture ? 'book-open' : 'file-text', { size: 13, className: isScripture ? 'lucide-icon icon-cyan' : 'lucide-icon icon-pink' })} <span>${tpl.name}</span></span>
           <div style="display: flex; gap: 4px; align-items: center;">
             ${isActive ? '<span class="count" style="color: var(--accent-cyan); font-weight:700;">ACTIVO</span>' : ''}
             <button class="btn-delete-media btn-delete-tpl" data-delete-tpl-id="${tpl.id}" title="Eliminar plantilla">${iconSvg('x', { size: 11 })}</button>
@@ -4216,11 +4284,16 @@ class ProPresenterApp {
       item.addEventListener('click', (e) => {
         if (e.target.closest('.btn-delete-tpl')) return;
         const id = item.getAttribute('data-tpl-id');
-        store.setActiveTemplate(id);
-        if (store.activeDeckId) {
-          store.setDeckTemplate(store.activeDeckId, id);
+        if (this.templateScope === 'scripture') {
+          store.setActiveScriptureTemplate(id);
+          this.populateTemplateForm(store.state.activeScriptureTemplate);
+        } else {
+          store.setActiveTemplate(id);
+          if (store.activeDeckId) {
+            store.setDeckTemplate(store.activeDeckId, id);
+          }
+          this.populateTemplateForm(store.state.activeTemplate);
         }
-        this.populateTemplateForm(store.state.activeTemplate);
       });
     });
 
@@ -4229,8 +4302,16 @@ class ProPresenterApp {
         e.stopPropagation();
         const id = btn.getAttribute('data-delete-tpl-id');
         if (confirm("¿Deseas eliminar esta plantilla de la biblioteca?")) {
-          store.deleteTemplate(id);
-          this.populateTemplateForm(store.state.activeTemplate);
+          if (this.templateScope === 'scripture') {
+            if (!store.deleteScriptureTemplate(id)) {
+              this.showToast("Debes conservar al menos una plantilla de versículos.", "warn");
+              return;
+            }
+            this.populateTemplateForm(store.state.activeScriptureTemplate);
+          } else {
+            store.deleteTemplate(id);
+            this.populateTemplateForm(store.state.activeTemplate);
+          }
         }
       });
     });
@@ -4257,8 +4338,12 @@ class ProPresenterApp {
     const b = parseInt(bgHex.slice(5, 7), 16) || 0;
     const rgbaBg = `rgba(${r}, ${g}, ${b}, ${bgOpacity})`;
 
+    const activeId = this.templateScope === 'scripture'
+      ? (store.activeScriptureTemplateId || 'scripture-tpl-' + Date.now())
+      : (store.activeTemplateId || 'tpl-' + Date.now());
+
     return {
-      id: store.activeTemplateId || 'tpl-' + Date.now(),
+      id: activeId,
       name,
       fontFamily: font,
       fontSize: size,
@@ -4391,21 +4476,36 @@ class ProPresenterApp {
 
         this.updateTemplateLivePreview();
 
-        // INSTANT REAL-TIME UPDATE TO ACTIVE SLIDE & AUDIENCE DISPLAY
+        // INSTANT REAL-TIME UPDATE TO ACTIVE TEMPLATE (SONGS OR SCRIPTURE INDEPENDENTLY)
         const updatedTpl = this.getCurrentTemplateFormObject();
-        store.updateActiveTemplateProperties(updatedTpl);
+        if (this.templateScope === 'scripture') {
+          store.updateActiveScriptureTemplateProperties(updatedTpl);
+        } else {
+          store.updateActiveTemplateProperties(updatedTpl);
+        }
       };
 
       el?.addEventListener('input', handleInput);
       el?.addEventListener('change', handleInput);
     });
 
+    document.getElementById('btn-tpl-scope-songs')?.addEventListener('click', () => {
+      this.setTemplateScope('songs');
+    });
+    document.getElementById('btn-tpl-scope-scripture')?.addEventListener('click', () => {
+      this.setTemplateScope('scripture');
+    });
+
     const applyCurrentTemplate = () => {
       const tplObj = this.getCurrentTemplateFormObject();
-      store.saveTemplate(tplObj);
-      const activeDeck = store.activeDeck;
-      if (activeDeck) {
-        activeDeck.templateId = tplObj.id;
+      if (this.templateScope === 'scripture') {
+        store.saveScriptureTemplate(tplObj);
+      } else {
+        store.saveTemplate(tplObj);
+        const activeDeck = store.activeDeck;
+        if (activeDeck) {
+          activeDeck.templateId = tplObj.id;
+        }
       }
       this.renderTemplatesSidebar(store.state);
     };
@@ -4431,27 +4531,33 @@ class ProPresenterApp {
     const saveNewTemplate = () => {
       const tplName = this.inputTemplateName ? this.inputTemplateName.value.trim() : "";
       if (tplName) {
-        const newId = 'tpl-' + Date.now();
+        const isScripture = this.templateScope === 'scripture';
+        const newId = (isScripture ? 'scripture-tpl-' : 'tpl-') + Date.now();
         const newTpl = {
           id: newId,
           name: tplName,
+          category: isScripture ? 'Escrituras' : 'Estándar',
           fontFamily: 'Inter, sans-serif',
-          fontSize: 52,
+          fontSize: isScripture ? 44 : 52,
           letterSpacing: 0,
-          lineHeight: 1.25,
+          lineHeight: isScripture ? 1.3 : 1.25,
           color: '#ffffff',
           textAlign: 'center',
           maxLines: 0,
           posY: 50,
-          bgColor: 'rgba(0, 0, 0, 0.4)',
+          bgColor: isScripture ? 'rgba(15, 23, 42, 0.55)' : 'rgba(0, 0, 0, 0.4)',
           padding: 20,
-          borderRadius: 8,
+          borderRadius: 10,
           bgImageUrl: ''
         };
-        store.saveTemplate(newTpl);
+        if (isScripture) {
+          store.saveScriptureTemplate(newTpl);
+        } else {
+          store.saveTemplate(newTpl);
+        }
         this.populateTemplateForm(newTpl);
         closeModalTemplate();
-        this.showToast(`Plantilla "${tplName}" creada.`, "success");
+        this.showToast(`Plantilla de ${isScripture ? 'versículos' : 'canciones'} "${tplName}" creada.`, "success");
       } else {
         this.showToast("Por favor ingresa un nombre para la plantilla.", "warn");
         this.ensureModalInteractive(this.modalCreateTemplate, this.inputTemplateName);
@@ -4843,19 +4949,28 @@ class ProPresenterApp {
     const firstChunk = chunks[0];
     const refLine = showRef ? `\n<span class="slide-scripture-ref">${fullTitle}</span>` : '';
 
-    store.state.liveText = `${firstChunk}${refLine}`;
-    store.state.liveSlideImage = "";
-    store.state.liveSlideNotes = "";
-    store.state.isTextCleared = false;
-    store.notify();
+    store.setLiveScripture(`${firstChunk}${refLine}`);
   }
 
   populateScriptureSettingsForm() {
+    const selTemplate = document.getElementById('select-scripture-template');
     const selMaxLines = document.getElementById('select-scripture-maxlines');
     const selFont = document.getElementById('select-scripture-font');
     const selSplit = document.getElementById('select-scripture-split');
     const chkShowRef = document.getElementById('check-scripture-show-ref');
 
+    if (selTemplate && Array.isArray(store.scriptureTemplates)) {
+      const optionsKey = store.scriptureTemplates.map(t => `${t.id}:${t.name}`).join('|');
+      if (selTemplate.getAttribute('data-tpl-key') !== optionsKey) {
+        selTemplate.innerHTML = store.scriptureTemplates
+          .map(t => `<option value="${t.id}">${t.name}</option>`)
+          .join('');
+        selTemplate.setAttribute('data-tpl-key', optionsKey);
+      }
+      if (document.activeElement !== selTemplate && selTemplate.value !== store.activeScriptureTemplateId) {
+        selTemplate.value = store.activeScriptureTemplateId;
+      }
+    }
     if (selMaxLines && document.activeElement !== selMaxLines && selMaxLines.value !== String(store.state.scriptureMaxLines)) {
       selMaxLines.value = String(store.state.scriptureMaxLines);
     }
@@ -4915,6 +5030,18 @@ class ProPresenterApp {
     });
 
     // Dock Scripture Settings Form Handlers (Real-time Instant Updating)
+    document.getElementById('select-scripture-template')?.addEventListener('change', (e) => {
+      store.setActiveScriptureTemplate(e.target.value);
+      if (this.activeVerseData) this.projectActiveVerse();
+      this.renderScripture3ColView();
+    });
+
+    document.getElementById('btn-edit-scripture-templates')?.addEventListener('click', () => {
+      const tplTab = document.querySelector('.res-tab[data-res="templates"]');
+      if (tplTab) tplTab.click();
+      this.setTemplateScope('scripture');
+    });
+
     document.getElementById('select-scripture-maxlines')?.addEventListener('change', (e) => {
       store.setScriptureSettings({ maxLines: parseInt(e.target.value) });
       this.projectActiveVerse();
@@ -5199,12 +5326,12 @@ class ProPresenterApp {
             let cardBgHTML = '';
             if (activeMediaUrl) {
               if (isImg || activeMediaThumb) {
-                cardBgHTML = `<img src="${activeMediaThumb || activeMediaUrl}" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.55; z-index: 0; pointer-events: none;" />`;
+                cardBgHTML = `<img src="${activeMediaThumb || activeMediaUrl}" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.55; z-index: 0; pointer-events: none;" />`;
               } else {
-                cardBgHTML = `<video src="${activeMediaUrl}" muted preload="metadata" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.55; z-index: 0; pointer-events: none;"></video>`;
+                cardBgHTML = `<video src="${activeMediaUrl}" muted preload="metadata" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.55; z-index: 0; pointer-events: none;"></video>`;
               }
             } else {
-              cardBgHTML = `<div style="position: absolute; inset: 0; background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%); z-index: 0; pointer-events: none;"></div>`;
+              cardBgHTML = `<div style="position: absolute; inset: 0; background: #000000; z-index: 0; pointer-events: none;"></div>`;
             }
 
             return `

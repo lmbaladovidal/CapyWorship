@@ -753,6 +753,67 @@ test('RF-60: Creación de deck de presentación visual y textual, proyección de
   if (totalTextSlides !== 3) throw new Error('El modo texto con includeHidden=true debe incluir las 3 diapositivas.');
 });
 
+console.log('\n▶️ Grupo 16: Templates Independientes de Versículos vs Canciones (RF-62)');
+
+test('RF-62: Templates independientes para versículos y canciones sin interferencia mutua', () => {
+  const store = new Store();
+
+  const initialSongTplId = store.activeTemplateId;
+  if (!Array.isArray(store.scriptureTemplates) || store.scriptureTemplates.length < 2) {
+    throw new Error('Deben existir plantillas independientes por defecto para versículos.');
+  }
+
+  // Cambiar template de versículo no debe alterar el template activo de canciones
+  const secondScriptureTpl = store.scriptureTemplates[1];
+  store.setActiveScriptureTemplate(secondScriptureTpl.id);
+  if (store.activeTemplateId !== initialSongTplId) {
+    throw new Error('Cambiar el template de versículos no debe cambiar el template de canciones.');
+  }
+
+  // Proyectar versículo usa activeScriptureTemplate sin contaminar las canciones
+  store.setLiveScripture('Porque de tal manera amó Dios al mundo');
+  if (store.state.liveContentType !== 'scripture') {
+    throw new Error('liveContentType debe ser scripture.');
+  }
+  if (store.state.activeTemplate.id !== secondScriptureTpl.id) {
+    throw new Error('El versículo proyectado debe usar el template de versículos activo.');
+  }
+
+  // Al proyectar una canción después, recupera el template propio de la canción
+  store.setActiveDeck(DEFAULT_DECKS[0].id);
+  store.setLiveSlide(0, 0);
+  if (store.state.liveContentType !== 'slide') {
+    throw new Error('liveContentType debe volver a slide al proyectar canción.');
+  }
+  if (store.state.activeTemplate.id === secondScriptureTpl.id) {
+    throw new Error('La canción proyectada no debe heredar el template de versículos.');
+  }
+});
+
+console.log('\n▶️ Grupo 17: Eliminación de Carpeta General y Caché por Lotes de Miniaturas (RF-63)');
+
+test('RF-63: Eliminación de carpeta General y rehidratación por lotes de miniaturas en caché', () => {
+  const store = new Store();
+
+  // 1. Verificar que se puede eliminar la carpeta "General"
+  if (!store.state.mediaFolders.includes('General')) {
+    throw new Error('General debe existir inicialmente.');
+  }
+  store.deleteMediaFolder('General');
+  if (store.state.mediaFolders.includes('General')) {
+    throw new Error('Debe poder eliminarse la carpeta General.');
+  }
+
+  // 2. Verificar hidratación por lotes desde caché (sin regenerar ni disparar notify por cada item)
+  const item = store.addMediaItem('Video Test', 'file:///C:/videos/test.mp4', 'video/mp4', 'Anuncios', '', 'C:\\videos\\test.mp4');
+  item.thumbnail = '';
+  const thumbMap = new Map([['C:\\videos\\test.mp4', 'data:image/jpeg;base64,CACHED_OK']]);
+  const updated = store.hydrateMediaThumbnailsBatch(thumbMap);
+  if (updated !== 1 || item.thumbnail !== 'data:image/jpeg;base64,CACHED_OK') {
+    throw new Error('hydrateMediaThumbnailsBatch debe restaurar la miniatura usando la clave estable.');
+  }
+});
+
 
 // ----------------------------------------------------
 // RESUMEN FINAL

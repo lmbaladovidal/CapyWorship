@@ -308,6 +308,66 @@ export const DEFAULT_TEMPLATES = [
   }
 ];
 
+export const DEFAULT_SCRIPTURE_TEMPLATES = [
+  {
+    id: "scripture-modern",
+    name: "Versículo Moderno",
+    category: "Escrituras",
+    fontFamily: "Inter, sans-serif",
+    fontSize: 44,
+    letterSpacing: 0,
+    lineHeight: 1.3,
+    color: "#ffffff",
+    textShadow: "0 4px 16px rgba(0,0,0,0.85)",
+    textAlign: "center",
+    maxLines: 0,
+    verticalAlign: "center",
+    posY: 50,
+    bgColor: "rgba(15, 23, 42, 0.55)",
+    padding: 24,
+    borderRadius: 12,
+    bgImageUrl: ""
+  },
+  {
+    id: "scripture-lower",
+    name: "Versículo Inferior (Tercios)",
+    category: "Escrituras",
+    fontFamily: "Outfit, sans-serif",
+    fontSize: 34,
+    letterSpacing: 0.5,
+    lineHeight: 1.25,
+    color: "#f8fafc",
+    textShadow: "0 2px 10px rgba(0,0,0,0.9)",
+    textAlign: "left",
+    maxLines: 0,
+    verticalAlign: "bottom",
+    posY: 82,
+    bgColor: "rgba(10, 15, 28, 0.85)",
+    padding: 18,
+    borderRadius: 10,
+    bgImageUrl: ""
+  },
+  {
+    id: "scripture-classic",
+    name: "Versículo Clásico",
+    category: "Escrituras",
+    fontFamily: "Georgia, serif",
+    fontSize: 46,
+    letterSpacing: 0,
+    lineHeight: 1.35,
+    color: "#fef3c7",
+    textShadow: "0 4px 18px rgba(0,0,0,0.9)",
+    textAlign: "center",
+    maxLines: 0,
+    verticalAlign: "center",
+    posY: 50,
+    bgColor: "rgba(0, 0, 0, 0.45)",
+    padding: 24,
+    borderRadius: 8,
+    bgImageUrl: ""
+  }
+];
+
 const getStorageItem = (key) => (typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null);
 const setStorageItem = (key, val) => (typeof localStorage !== 'undefined' ? localStorage.setItem(key, val) : null);
 
@@ -321,10 +381,15 @@ export class Store {
     this.projectDeckIds = savedProjectIds ? JSON.parse(savedProjectIds) : this.decks.map(d => d.id);
     this.activeDeckId = this.projectDeckIds[0] || this.decks[0]?.id || "song-1";
 
-    // Persistent Templates
+    // Persistent Templates (Songs / Shows)
     const savedTemplates = getStorageItem("propresenter_templates");
     this.templates = savedTemplates ? JSON.parse(savedTemplates) : JSON.parse(JSON.stringify(DEFAULT_TEMPLATES));
     this.activeTemplateId = getStorageItem("propresenter_active_template") || "preset-modern";
+
+    // Persistent Scripture Templates (Independent from Song / Show Templates)
+    const savedScriptureTemplates = getStorageItem("propresenter_scripture_templates");
+    this.scriptureTemplates = savedScriptureTemplates ? JSON.parse(savedScriptureTemplates) : JSON.parse(JSON.stringify(DEFAULT_SCRIPTURE_TEMPLATES));
+    this.activeScriptureTemplateId = getStorageItem("propresenter_active_scripture_template") || this.scriptureTemplates[0]?.id || "scripture-modern";
 
     // Persistent Media Library & Folders
     const savedMedia = getStorageItem("propresenter_media_library");
@@ -355,6 +420,8 @@ export class Store {
 
       // Active Template Object
       activeTemplate: this.templates.find(t => t.id === this.activeTemplateId) || this.templates[0],
+      activeScriptureTemplate: this.scriptureTemplates.find(t => t.id === this.activeScriptureTemplateId) || this.scriptureTemplates[0],
+      liveContentType: "slide",
 
       // Media Virtual & Physical Folders
       mediaFolders: savedFolders ? JSON.parse(savedFolders) : ["General", "Anuncios", "Rápidos", "Estribos"],
@@ -468,6 +535,8 @@ export class Store {
     setStorageItem("propresenter_media_queue", JSON.stringify(this.state.mediaQueue || []));
     setStorageItem("propresenter_templates", JSON.stringify(this.templates));
     setStorageItem("propresenter_active_template", this.activeTemplateId);
+    setStorageItem("propresenter_scripture_templates", JSON.stringify(this.scriptureTemplates));
+    setStorageItem("propresenter_active_scripture_template", this.activeScriptureTemplateId);
     setStorageItem("propresenter_text_trans", this.state.textTransition);
     setStorageItem("propresenter_media_trans", this.state.mediaTransition);
     setStorageItem("propresenter_fade_duration", this.state.fadeDuration);
@@ -515,7 +584,19 @@ export class Store {
 
   setScriptureSettings(settings) {
     if (settings.maxLines !== undefined) this.state.scriptureMaxLines = settings.maxLines;
-    if (settings.font !== undefined) this.state.scriptureFont = settings.font;
+    if (settings.font !== undefined) {
+      this.state.scriptureFont = settings.font;
+      if (this.state.activeScriptureTemplate) {
+        this.state.activeScriptureTemplate = { ...this.state.activeScriptureTemplate, fontFamily: settings.font };
+        const idx = this.scriptureTemplates.findIndex(t => t.id === this.activeScriptureTemplateId);
+        if (idx !== -1) {
+          this.scriptureTemplates[idx] = { ...this.state.activeScriptureTemplate };
+        }
+        if (this.state.liveContentType === "scripture") {
+          this.state.activeTemplate = { ...this.state.activeScriptureTemplate };
+        }
+      }
+    }
     if (settings.splitLong !== undefined) this.state.scriptureSplitLong = settings.splitLong;
     if (settings.showRef !== undefined) this.state.scriptureShowRef = settings.showRef;
 
@@ -638,6 +719,95 @@ export class Store {
     this.notify();
   }
 
+  // =========================================================================
+  // TEMPLATES INDEPENDIENTES PARA VERSÍCULOS / ESCRITURAS
+  // =========================================================================
+  setActiveScriptureTemplate(templateId) {
+    const template = this.scriptureTemplates.find(t => t.id === templateId);
+    if (!template) return;
+    this.activeScriptureTemplateId = templateId;
+    this.state.activeScriptureTemplate = { ...template };
+    if (template.fontFamily) {
+      this.state.scriptureFont = template.fontFamily;
+      setStorageItem("propresenter_scripture_font", template.fontFamily);
+    }
+    setStorageItem("propresenter_active_scripture_template", templateId);
+    if (this.state.liveContentType === "scripture" && !this.state.isTextCleared) {
+      this.state.activeTemplate = { ...template };
+    }
+    this.notify();
+  }
+
+  updateActiveScriptureTemplateProperties(props) {
+    if (!this.state.activeScriptureTemplate) return;
+    this.state.activeScriptureTemplate = { ...this.state.activeScriptureTemplate, ...props };
+    const idx = this.scriptureTemplates.findIndex(t => t.id === (props.id || this.activeScriptureTemplateId));
+    if (idx !== -1) {
+      this.scriptureTemplates[idx] = { ...this.state.activeScriptureTemplate };
+    }
+    if (this.state.activeScriptureTemplate.fontFamily) {
+      this.state.scriptureFont = this.state.activeScriptureTemplate.fontFamily;
+      setStorageItem("propresenter_scripture_font", this.state.scriptureFont);
+    }
+    setStorageItem("propresenter_scripture_templates", JSON.stringify(this.scriptureTemplates));
+    if (this.state.liveContentType === "scripture") {
+      this.state.activeTemplate = { ...this.state.activeScriptureTemplate };
+    }
+    this.notify();
+  }
+
+  saveScriptureTemplate(templateData) {
+    const existingIndex = this.scriptureTemplates.findIndex(t => t.id === templateData.id);
+    if (existingIndex >= 0) {
+      this.scriptureTemplates[existingIndex] = { ...this.scriptureTemplates[existingIndex], ...templateData };
+    } else {
+      this.scriptureTemplates.push(templateData);
+    }
+    this.activeScriptureTemplateId = templateData.id;
+    this.state.activeScriptureTemplate = { ...templateData };
+    if (templateData.fontFamily) {
+      this.state.scriptureFont = templateData.fontFamily;
+      setStorageItem("propresenter_scripture_font", templateData.fontFamily);
+    }
+    if (this.state.liveContentType === "scripture") {
+      this.state.activeTemplate = { ...templateData };
+    }
+    this.notify();
+  }
+
+  deleteScriptureTemplate(templateId) {
+    if (this.scriptureTemplates.length <= 1) {
+      return false;
+    }
+    this.scriptureTemplates = this.scriptureTemplates.filter(t => t.id !== templateId);
+    if (this.activeScriptureTemplateId === templateId) {
+      this.activeScriptureTemplateId = this.scriptureTemplates[0].id;
+      this.state.activeScriptureTemplate = { ...this.scriptureTemplates[0] };
+      if (this.state.liveContentType === "scripture") {
+        this.state.activeTemplate = { ...this.state.activeScriptureTemplate };
+      }
+    }
+    this.notify();
+    return true;
+  }
+
+  setLiveScripture(text) {
+    this.state.liveContentType = "scripture";
+    this.state.liveText = text;
+    this.state.liveSlideImage = "";
+    this.state.liveSlideNotes = "";
+    this.state.liveSlideId = null;
+    this.state.isTextCleared = false;
+    const activeScTpl = this.scriptureTemplates.find(t => t.id === this.activeScriptureTemplateId)
+      || this.state.activeScriptureTemplate
+      || this.scriptureTemplates[0];
+    if (activeScTpl) {
+      this.state.activeScriptureTemplate = { ...activeScTpl };
+      this.state.activeTemplate = { ...activeScTpl };
+    }
+    this.notify();
+  }
+
   setLiveSlide(groupIndex, slideIndex) {
     const deck = this.activeDeck;
     if (!deck || !deck.groups[groupIndex]) return;
@@ -654,6 +824,7 @@ export class Store {
       this.state.isOverlayCleared = false;
     } else {
       const slideLabel = slide.text || (slide.image ? `${deck.title} — Diapositiva ${slideIndex + 1}` : "");
+      this.state.liveContentType = "slide";
       this.state.liveText = slide.image ? (slide.text || slideLabel) : slide.text;
       this.state.liveSlideImage = slide.image || "";
       this.state.liveSlideNotes = slide.notes || "";
@@ -1277,11 +1448,21 @@ export class Store {
   }
 
   deleteMediaFolder(folderName) {
-    if (folderName === "General") return;
+    if (!folderName) return;
     this.state.mediaFolders = this.state.mediaFolders.filter(f => f !== folderName);
-    this.state.mediaLibrary.forEach(item => {
-      if (item.folder === folderName) item.folder = "General";
-    });
+    const fallbackFolder = this.state.mediaFolders[0] || "";
+    if (fallbackFolder) {
+      this.state.mediaLibrary.forEach(item => {
+        if (!item.isPhysicalFolderItem && item.folder === folderName) {
+          item.folder = fallbackFolder;
+        }
+      });
+    } else {
+      // Si se eliminó la última carpeta virtual, quitar los elementos virtuales huérfanos de esa carpeta
+      this.state.mediaLibrary = this.state.mediaLibrary.filter(item =>
+        item.isPhysicalFolderItem || item.folder !== folderName
+      );
+    }
     this.notify();
   }
 
@@ -1459,8 +1640,27 @@ export class Store {
     const target = this.state.mediaLibrary.find(m => m.id === itemId);
     if (target && thumbnail && target.thumbnail !== thumbnail) {
       target.thumbnail = thumbnail;
-      this.notify();
+      // Solo refrescar UI sin reescribir todo localStorage por cada miniatura
+      this.listeners.forEach(fn => fn(this.state, this.decks));
     }
+  }
+
+  hydrateMediaThumbnailsBatch(thumbMap) {
+    if (!thumbMap || !(thumbMap instanceof Map) || thumbMap.size === 0) return 0;
+    let updatedCount = 0;
+    this.state.mediaLibrary.forEach(item => {
+      if (item.thumbnail) return;
+      const stableKey = item.filePath || item.url || '';
+      const cached = thumbMap.get(item.id) || (stableKey ? thumbMap.get(stableKey) : null);
+      if (cached) {
+        item.thumbnail = cached;
+        updatedCount++;
+      }
+    });
+    if (updatedCount > 0) {
+      this.listeners.forEach(fn => fn(this.state, this.decks));
+    }
+    return updatedCount;
   }
 
   deleteMediaItem(itemId) {

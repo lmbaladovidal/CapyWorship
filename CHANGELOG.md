@@ -6,6 +6,22 @@ For detailed release notes in Spanish, please see [NOTAS_DE_VERSION.md](./NOTAS_
 
 ---
 
+## [2.1.0] - 2026-11-15
+
+### Added
+- **Independent Scripture Templates:** Added a dedicated `scriptureTemplates` store (`DEFAULT_SCRIPTURE_TEMPLATES`, `activeScriptureTemplateId`, `liveContentType`) completely isolated from Song/Show templates, with a `Canciones | Versículos` scope switcher in the Templates sidebar and a `Template de Versículo` selector + `Editar` button in the Scripture dock.
+- **Batch Thumbnail Cache Hydration:** Added `getAllThumbnailsMap()` in `media-cache.js` and `hydrateMediaThumbnailsBatch()` in `state.js` to load cached thumbnails in a single batch at startup and avoid spawning `<video>` decoders in the media grid.
+
+### Changed
+- **Video Fit Mode:** Changed audience, operator preview, and template preview video/media layers to `object-fit: contain` so vertical videos display completely without cropping.
+- **Pure Black Audience Fallback:** Replaced the blue fallback background in `audience.html` and empty slide cards with `#000000`.
+- **Media Folder Deletion:** Allowed deleting any virtual media folder, including `"General"`.
+
+### Fixed
+- **Presentation Import:** Stopped auto-projecting slide 1 to live output upon importing PowerPoint/PDF files.
+
+---
+
 ## [2.0.0] - 2026-11-12
 
 ### Changed

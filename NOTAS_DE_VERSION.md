@@ -4,6 +4,18 @@ Todas las novedades, mejoras y correcciones de errores importantes de **ProPrese
 
 ---
 
+## 🚀 Versión 2.1.0 (Templates Independientes de Versículos, Videos en Fit, Caché de Miniaturas y Estabilidad) — *15 de Noviembre, 2026*
+
+### ✨ Novedades y Mejoras Principales
+- **📖 Templates Independientes para Versículos:** Los versículos bíblicos ahora cuentan con su propia biblioteca de plantillas (`Versículo Moderno`, `Versículo Inferior`, `Versículo Clásico`, etc.) completamente independiente de los templates de canciones/shows, con selector directo en *Ajustes de Escrituras* y editor dedicado en *Templates → Versículos*.
+- **🎬 Videos en Modo Fit y Pantalla Negra:** Los videos (incluidos verticales) se ajustan completos sin recortes (`object-fit: contain`), y cuando no hay nada proyectándose la pantalla de Audiencia permanece completamente negra (`#000000`).
+- **⚡ Transición Cut Real en Videos:** El modo *Cut* ahora conmuta capas multimedia de forma instantánea sin fundidos residuales.
+- **🚀 Caché de Miniaturas en Arranque:** Hidratación por lotes desde IndexedDB en una sola lectura al iniciar la app, evitando decodificar o regenerar miniaturas de videos ya cacheados.
+- **📁 Gestión Total de Carpetas y Presentaciones:** Se puede eliminar cualquier carpeta virtual de medios (incluida *General*) y las presentaciones PowerPoint/PDF importadas ya no se envían automáticamente a pantalla en vivo.
+- **🪟 Estabilidad de Modales y Textboxes:** Los modales no se cierran al hacer clic fuera de ellos y se corrigió de raíz el foco de cajas de texto e inputs en Electron.
+
+---
+
 ## 🚀 Versión 2.0.0 (Rediseño Visual Completo, Coherencia Tipográfica y Experiencia Pro) — *12 de Noviembre, 2026*
 
 Esta versión mayor representa una renovación visual integral para **ProPresenter AI Studio / FreePresenter AI**, logrando una estética coherente, limpia y profesional en todas sus vistas, modales y barras de herramientas.

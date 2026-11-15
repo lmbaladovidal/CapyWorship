@@ -71,7 +71,43 @@ export class MediaCache {
   }
 
   /**
-   * Guarda una miniatura en IndexedDB
+   * Genera una miniatura SVG estática ligera cuando un video remoto bloquea canvas por CORS
+   * para evitar reintentos continuos en cada inicio.
+   */
+  static getFallbackVideoThumb() {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><rect width="320" height="180" fill="#0f172a"/><circle cx="160" cy="90" r="26" fill="rgba(56,189,248,0.18)" stroke="#38bdf8" stroke-width="2"/><polygon points="153,78 173,90 153,102" fill="#38bdf8"/></svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }
+
+  /**
+   * Obtiene todas las miniaturas cacheadas en IndexedDB en una sola transacción (para inicio ultrarrápido).
+   */
+  static async getAllThumbnailsMap() {
+    const map = new Map();
+    try {
+      const db = await getDB();
+      if (!db) return map;
+      return new Promise((resolve) => {
+        const tx = db.transaction('thumbnails', 'readonly');
+        const req = tx.objectStore('thumbnails').getAll();
+        req.onsuccess = () => {
+          const rows = Array.isArray(req.result) ? req.result : [];
+          rows.forEach(row => {
+            if (row && row.id && row.dataUrl) {
+              map.set(row.id, row.dataUrl);
+            }
+          });
+          resolve(map);
+        };
+        req.onerror = () => resolve(map);
+      });
+    } catch (e) {
+      return map;
+    }
+  }
+
+  /**
+   * Guarda una miniatura en IndexedDB (por ID y opcionalmente por clave estable filePath/url)
    */
   static async saveThumbnail(id, dataUrl) {
     if (!id || !dataUrl) return;
@@ -85,20 +121,39 @@ export class MediaCache {
     }
   }
 
+  static async saveThumbnailForItem(item, dataUrl) {
+    if (!item || !dataUrl) return;
+    const stableKey = item.filePath || item.url || '';
+    try {
+      const db = await getDB();
+      if (!db) return;
+      const tx = db.transaction('thumbnails', 'readwrite');
+      const store = tx.objectStore('thumbnails');
+      if (item.id) store.put({ id: item.id, dataUrl, updatedAt: Date.now() });
+      if (stableKey && stableKey !== item.id) {
+        store.put({ id: stableKey, dataUrl, updatedAt: Date.now() });
+      }
+    } catch (e) {
+      console.warn('Error guardando miniatura en IndexedDB:', e);
+    }
+  }
+
   /**
    * Obtiene una miniatura desde IndexedDB
    */
-  static async getThumbnail(id) {
-    if (!id) return null;
+  static async getThumbnail(id, stableKey = '') {
+    if (!id && !stableKey) return null;
     try {
       const db = await getDB();
       if (!db) return null;
-      return new Promise((resolve) => {
+      const lookup = (key) => new Promise((resolve) => {
+        if (!key) return resolve(null);
         const tx = db.transaction('thumbnails', 'readonly');
-        const req = tx.objectStore('thumbnails').get(id);
+        const req = tx.objectStore('thumbnails').get(key);
         req.onsuccess = () => resolve(req.result ? req.result.dataUrl : null);
         req.onerror = () => resolve(null);
       });
+      return (await lookup(id)) || (stableKey ? await lookup(stableKey) : null);
     } catch (e) {
       return null;
     }
