@@ -189,7 +189,6 @@ ipcMain.on('focus-main-window', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
-    mainWindow.webContents.focus();
   }
 });
 
@@ -363,7 +362,6 @@ ipcMain.handle('select-physical-folder', async () => {
 
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.focus();
-    mainWindow.webContents.focus();
   }
 
   return {
@@ -425,7 +423,6 @@ ipcMain.handle('select-presentation-file', async () => {
 
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.focus();
-    mainWindow.webContents.focus();
   }
 
   if (result.canceled || !result.filePaths || result.filePaths.length === 0) {

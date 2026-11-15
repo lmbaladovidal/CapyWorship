@@ -64,6 +64,7 @@ class ProPresenterApp {
     this.initDOM();
     this.bindEvents();
     this.initModalBackdropListeners();
+    this.initUniversalInputFocusHandler();
     this.initKeyboardShortcuts();
     this.bindContextMenuEvents();
     this.initPhysicalFoldersSync();
@@ -3391,9 +3392,12 @@ class ProPresenterApp {
 
   initModalBackdropListeners() {
     document.querySelectorAll('.modal-overlay').forEach(modal => {
+      // Regla de usuario: Al hacer click fuera de la ventana modal sea cual sea, NO debe cerrarse.
+      // Las ventanas modales solo se cierran con sus botones explícitos de cancelar / cerrar o tecla Esc.
       modal.addEventListener('click', (e) => {
         if (e.target === modal) {
-          this.closeAllModals();
+          e.preventDefault();
+          e.stopPropagation();
         }
       });
 
@@ -3402,25 +3406,35 @@ class ProPresenterApp {
         card.addEventListener('click', (e) => {
           e.stopPropagation();
         });
-
-        card.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-          const interactiveEl = e.target.closest('input, textarea, select');
-          if (interactiveEl && !interactiveEl.disabled) {
-            try {
-              if (window.electronAPI && typeof window.electronAPI.focusMainWindow === 'function') {
-                window.electronAPI.focusMainWindow();
-              }
-            } catch (err) {}
-            setTimeout(() => {
-              if (document.activeElement !== interactiveEl) {
-                try { interactiveEl.focus(); } catch (err) {}
-              }
-            }, 0);
-          }
-        });
       }
     });
+  }
+
+  initUniversalInputFocusHandler() {
+    // Garantiza que cualquier clic sobre textboxes, inputs, selects o áreas editables tome foco de inmediato
+    const focusElementIfApplicable = (target) => {
+      if (!target) return;
+      const el = target.closest('input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]');
+      if (el && !el.disabled && !el.readOnly) {
+        el.style.pointerEvents = 'auto';
+        if (document.activeElement !== el) {
+          try { el.focus(); } catch (err) {}
+        }
+        setTimeout(() => {
+          if (document.activeElement !== el && !el.disabled && !el.readOnly) {
+            try { el.focus(); } catch (err) {}
+          }
+        }, 0);
+      }
+    };
+
+    document.addEventListener('pointerdown', (e) => {
+      focusElementIfApplicable(e.target);
+    }, true);
+
+    document.addEventListener('click', (e) => {
+      focusElementIfApplicable(e.target);
+    }, true);
   }
 
   hideContextMenu() {
@@ -3552,6 +3566,8 @@ class ProPresenterApp {
 
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('blur', onMouseUp);
     };
 
     const onMouseMove = (e) => {
@@ -3578,6 +3594,8 @@ class ProPresenterApp {
 
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('blur', onMouseUp);
     };
 
     resizer.addEventListener('mousedown', onMouseDown);
@@ -5304,10 +5322,12 @@ class ProPresenterApp {
 
       if (state.isMediaCleared || !state.activeVideoUrl) {
         if (mediaMode === 'cut') {
-          bgA.style.transition = 'opacity 0s';
-          bgB.style.transition = 'opacity 0s';
-          if (imgA) imgA.style.transition = 'opacity 0s';
-          if (imgB) imgB.style.transition = 'opacity 0s';
+          bgA.style.transition = 'none';
+          bgB.style.transition = 'none';
+          if (imgA) imgA.style.transition = 'none';
+          if (imgB) imgB.style.transition = 'none';
+          void bgA.offsetWidth;
+          void bgB.offsetWidth;
         } else {
           bgA.style.transition = `opacity ${dur}ms ease-in-out`;
           bgB.style.transition = `opacity ${dur}ms ease-in-out`;
@@ -5346,7 +5366,6 @@ class ProPresenterApp {
         this.operatorActiveMediaLayer = this.operatorActiveMediaLayer === 'A' ? 'B' : 'A';
 
         const incomingEl = (isImage && incomingMedia.img) ? incomingMedia.img : incomingMedia.video;
-        const outgoingEl = (outgoingMedia.video && outgoingMedia.video.style.opacity > 0) ? outgoingMedia.video : outgoingMedia.img;
 
         if (isImage && incomingMedia.img) {
           incomingMedia.img.src = state.activeVideoUrl;
@@ -5371,35 +5390,53 @@ class ProPresenterApp {
 
         const performOperatorFade = () => {
           if (mediaMode === 'cut') {
-            if (incomingEl) incomingEl.style.transition = 'opacity 0s';
-            if (outgoingEl) outgoingEl.style.transition = 'opacity 0s';
+            if (incomingMedia.video) incomingMedia.video.style.transition = 'none';
+            if (incomingMedia.img) incomingMedia.img.style.transition = 'none';
+            if (outgoingMedia.video) outgoingMedia.video.style.transition = 'none';
+            if (outgoingMedia.img) outgoingMedia.img.style.transition = 'none';
+            if (incomingMedia.video) void incomingMedia.video.offsetWidth;
+            if (outgoingMedia.video) void outgoingMedia.video.offsetWidth;
             if (outgoingMedia.video) outgoingMedia.video.pause();
+            if (outgoingMedia.video) outgoingMedia.video.style.opacity = '0';
+            if (outgoingMedia.img) outgoingMedia.img.style.opacity = '0';
+            if (incomingEl) incomingEl.style.opacity = '1';
           } else {
             if (incomingEl) incomingEl.style.transition = `opacity ${dur}ms ease-in-out`;
-            if (outgoingEl) outgoingEl.style.transition = `opacity ${dur}ms ease-in-out`;
+            if (outgoingMedia.video) outgoingMedia.video.style.transition = `opacity ${dur}ms ease-in-out`;
+            if (outgoingMedia.img) outgoingMedia.img.style.transition = `opacity ${dur}ms ease-in-out`;
+            if (incomingEl) incomingEl.style.opacity = '1';
+            if (outgoingMedia.video) outgoingMedia.video.style.opacity = '0';
+            if (outgoingMedia.img) outgoingMedia.img.style.opacity = '0';
             this.operatorMediaFadeTimeout = setTimeout(() => {
               if (outgoingMedia.video) outgoingMedia.video.pause();
             }, dur + 50);
           }
-          if (incomingEl) incomingEl.style.opacity = '1';
-          if (outgoingEl) outgoingEl.style.opacity = '0';
         };
 
         if (isImage) {
           performOperatorFade();
         } else if (incomingMedia.video) {
+          if (mediaMode === 'cut') {
+            performOperatorFade();
+          }
           const playPromise = incomingMedia.video.play();
           if (playPromise !== undefined) {
             playPromise
-              .then(() => performOperatorFade())
+              .then(() => {
+                if (mediaMode !== 'cut') performOperatorFade();
+              })
               .catch(() => {
                 incomingMedia.video.muted = true;
                 incomingMedia.video.play()
-                  .then(() => performOperatorFade())
-                  .catch(() => performOperatorFade());
+                  .then(() => {
+                    if (mediaMode !== 'cut') performOperatorFade();
+                  })
+                  .catch(() => {
+                    if (mediaMode !== 'cut') performOperatorFade();
+                  });
               });
           } else {
-            performOperatorFade();
+            if (mediaMode !== 'cut') performOperatorFade();
           }
         }
       }

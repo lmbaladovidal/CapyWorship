@@ -107,6 +107,9 @@ test('RF-08/09: Modos de Transición (Cut/Fade) y Tiempo de Duración', () => {
   store.setMediaTransition('fade');
   if (store.state.mediaTransition !== 'fade') throw new Error('Falló el cambio de transición de medio a fade');
 
+  store.setMediaTransition('cut');
+  if (store.state.mediaTransition !== 'cut') throw new Error('Falló el cambio de transición de medio a cut');
+
   store.setFadeDuration(500);
   if (store.state.fadeDuration !== 500) throw new Error('Falló el ajuste del tiempo de fade a 500ms');
 });

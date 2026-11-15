@@ -358,10 +358,14 @@
 
       if (state.isMediaCleared || !state.activeVideoUrl) {
         if (mediaMode === 'cut') {
-          bgVideoA.style.transition = 'opacity 0s';
-          bgVideoB.style.transition = 'opacity 0s';
-          bgImgA.style.transition = 'opacity 0s';
-          bgImgB.style.transition = 'opacity 0s';
+          bgVideoA.style.transition = 'none';
+          bgVideoB.style.transition = 'none';
+          bgImgA.style.transition = 'none';
+          bgImgB.style.transition = 'none';
+          void bgVideoA.offsetWidth;
+          void bgVideoB.offsetWidth;
+          void bgImgA.offsetWidth;
+          void bgImgB.offsetWidth;
         } else {
           bgVideoA.style.transition = `opacity ${dur}ms ease-in-out`;
           bgVideoB.style.transition = `opacity ${dur}ms ease-in-out`;
@@ -401,7 +405,6 @@
         activeMediaLayer = activeMediaLayer === 'A' ? 'B' : 'A';
 
         const incomingEl = isImage ? incomingMedia.img : incomingMedia.video;
-        const outgoingEl = outgoingMedia.video.style.opacity > 0 ? outgoingMedia.video : outgoingMedia.img;
 
         if (isImage) {
           incomingMedia.img.src = currentVideoUrl;
@@ -424,36 +427,56 @@
 
         const performCrossfade = () => {
           if (mediaMode === 'cut') {
-            incomingEl.style.transition = 'opacity 0s';
-            outgoingEl.style.transition = 'opacity 0s';
+            incomingMedia.video.style.transition = 'none';
+            incomingMedia.img.style.transition = 'none';
+            outgoingMedia.video.style.transition = 'none';
+            outgoingMedia.img.style.transition = 'none';
+            void incomingMedia.video.offsetWidth;
+            void incomingMedia.img.offsetWidth;
+            void outgoingMedia.video.offsetWidth;
+            void outgoingMedia.img.offsetWidth;
             outgoingMedia.video.pause();
+            outgoingMedia.video.style.opacity = '0';
+            outgoingMedia.img.style.opacity = '0';
+            incomingEl.style.opacity = '1';
           } else {
             incomingEl.style.transition = `opacity ${dur}ms ease-in-out`;
-            outgoingEl.style.transition = `opacity ${dur}ms ease-in-out`;
+            outgoingMedia.video.style.transition = `opacity ${dur}ms ease-in-out`;
+            outgoingMedia.img.style.transition = `opacity ${dur}ms ease-in-out`;
+            incomingEl.style.opacity = '1';
+            outgoingMedia.video.style.opacity = '0';
+            outgoingMedia.img.style.opacity = '0';
             window.audienceMediaFadeTimeout = setTimeout(() => {
               outgoingMedia.video.pause();
             }, dur + 50);
           }
-          incomingEl.style.opacity = '1';
-          outgoingEl.style.opacity = '0';
         };
 
         if (isImage) {
           performCrossfade();
         } else {
+          if (mediaMode === 'cut') {
+            performCrossfade();
+          }
           const playPromise = incomingMedia.video.play();
           if (playPromise !== undefined) {
             playPromise
-              .then(() => performCrossfade())
+              .then(() => {
+                if (mediaMode !== 'cut') performCrossfade();
+              })
               .catch((err) => {
                 console.warn("[Audience] Autoplay with audio restricted, trying muted first:", err);
                 incomingMedia.video.muted = true;
                 incomingMedia.video.play()
-                  .then(() => performCrossfade())
-                  .catch(() => performCrossfade());
+                  .then(() => {
+                    if (mediaMode !== 'cut') performCrossfade();
+                  })
+                  .catch(() => {
+                    if (mediaMode !== 'cut') performCrossfade();
+                  });
               });
           } else {
-            performCrossfade();
+            if (mediaMode !== 'cut') performCrossfade();
           }
         }
       }

@@ -1919,9 +1919,15 @@ body {
   color: var(--text-muted);
 }
 
-input, select, textarea {
+input, select, textarea, [contenteditable="true"] {
   user-select: text !important;
+  -webkit-user-select: text !important;
   pointer-events: auto !important;
+  -webkit-app-region: no-drag !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea {
+  cursor: text !important;
 }
 
 .scripture-setting-group select {
