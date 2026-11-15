@@ -6,6 +6,14 @@ For detailed release notes in Spanish, please see [NOTAS_DE_VERSION.md](./NOTAS_
 
 ---
 
+## [2.1.1] - 2026-11-15
+
+### Fixed
+- **Media Folder Contents Visibility:** Separated `searchQuery` (Shows) from `mediaSearchQuery` (Media) so searching in Shows no longer hides contents across all virtual and physical media folders when switching to the Media tab.
+- **Media Grid Refresh & Search Reset:** Ensured `renderMediaDock(store.state)` refreshes on Media tab activation and empty-DOM states, and added an inline **Limpiar búsqueda** button when a media search query yields no matches.
+
+---
+
 ## [2.1.0] - 2026-11-15
 
 ### Added

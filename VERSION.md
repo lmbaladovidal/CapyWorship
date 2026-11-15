@@ -4,9 +4,14 @@ Este archivo registra el control de versiones, cambios granulares, mejoras y cor
 
 ---
 
-## 📌 Versión Actual: `v2.1.0` (Build 20261115.1)
+## 📌 Versión Actual: `v2.1.1` (Build 20261115.2)
 
 ### 🗓️ Registro de Cambios (Changelog Histórico)
+
+### [2.1.1] - 2026-11-15
+#### 🐛 Corrección de Visualización de Carpetas de Medios
+- **Búsqueda Independiente entre Shows y Media:** Se separó `searchQuery` (Shows) de `mediaSearchQuery` (Media) para evitar que buscar una canción oculte los contenidos de todas las carpetas virtuales y físicas al cambiar a la pestaña *Media*.
+- **Refresco y Limpieza de Filtro en Media:** Al cambiar a *Media* o seleccionar una carpeta se fuerza el refresco con `store.state`, y cuando un filtro de búsqueda en Media no tiene resultados se muestra un botón directo **Limpiar búsqueda**.
 
 ### [2.1.0] - 2026-11-15
 #### ✨ Mejoras de Proyección, Templates de Versículos, Rendimiento de Medios y Estabilidad UI

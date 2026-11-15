@@ -130,6 +130,8 @@ class ProPresenterApp {
     this.showsGridEl = document.getElementById('shows-grid');
     this.dockSearchInput = document.getElementById('dock-search-input');
     this.searchQuery = "";
+    this.mediaSearchQuery = "";
+    this.activeResTab = "shows";
     this.activeFilter = "all";
 
     // Virtual Media Elements
@@ -359,8 +361,19 @@ class ProPresenterApp {
         tab.classList.add('active');
 
         const resType = tab.getAttribute('data-res');
+        this.activeResTab = resType || 'shows';
         document.querySelectorAll('.res-tab-content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.sub-sidebar-content').forEach(s => s.classList.remove('active'));
+
+        if (this.dockSearchInput) {
+          if (this.activeResTab === 'media') {
+            this.dockSearchInput.value = this.mediaSearchQuery || '';
+            this.dockSearchInput.placeholder = 'Buscar videos o imágenes en esta carpeta...';
+          } else {
+            this.dockSearchInput.value = this.searchQuery || '';
+            this.dockSearchInput.placeholder = 'Buscar título o categoría...';
+          }
+        }
 
         if (resType === 'shows') {
           document.getElementById('res-tab-shows')?.classList.add('active');
@@ -368,6 +381,7 @@ class ProPresenterApp {
         } else if (resType === 'media') {
           document.getElementById('res-tab-media')?.classList.add('active');
           document.getElementById('sub-sidebar-media')?.classList.add('active');
+          this.renderMediaDock(store.state);
         } else if (resType === 'templates') {
           document.getElementById('res-tab-templates')?.classList.add('active');
           document.getElementById('sub-sidebar-templates')?.classList.add('active');
@@ -406,9 +420,9 @@ class ProPresenterApp {
     const projectSearchInput = document.getElementById('input-project-search');
     const btnClearProjectSearch = document.getElementById('btn-clear-project-search');
 
-    const applyShowsAndMediaSearch = (rawVal, sourceEl) => {
+    const applyShowsSearch = (rawVal, sourceEl) => {
       this.searchQuery = (rawVal || '').trim();
-      if (this.dockSearchInput && sourceEl !== this.dockSearchInput) {
+      if (this.dockSearchInput && sourceEl !== this.dockSearchInput && this.activeResTab !== 'media') {
         this.dockSearchInput.value = rawVal || '';
       }
       if (showsLocalSearchInput && sourceEl !== showsLocalSearchInput) {
@@ -418,21 +432,32 @@ class ProPresenterApp {
         btnClearShowsSearch.style.display = this.searchQuery ? 'inline-flex' : 'none';
       }
       this.lastShowsCacheKey = null;
-      this.lastMediaGridCacheKey = null;
       this.renderShowsDock(store.state, store.decks);
+    };
+
+    const applyMediaSearch = (rawVal, sourceEl) => {
+      this.mediaSearchQuery = (rawVal || '').trim();
+      if (this.dockSearchInput && sourceEl !== this.dockSearchInput && this.activeResTab === 'media') {
+        this.dockSearchInput.value = rawVal || '';
+      }
+      this.lastMediaGridCacheKey = null;
       this.renderMediaDock(store.state);
     };
 
     this.dockSearchInput?.addEventListener('input', (e) => {
-      applyShowsAndMediaSearch(e.target.value, this.dockSearchInput);
+      if (this.activeResTab === 'media') {
+        applyMediaSearch(e.target.value, this.dockSearchInput);
+      } else {
+        applyShowsSearch(e.target.value, this.dockSearchInput);
+      }
     });
 
     showsLocalSearchInput?.addEventListener('input', (e) => {
-      applyShowsAndMediaSearch(e.target.value, showsLocalSearchInput);
+      applyShowsSearch(e.target.value, showsLocalSearchInput);
     });
 
     btnClearShowsSearch?.addEventListener('click', () => {
-      applyShowsAndMediaSearch('', null);
+      applyShowsSearch('', null);
       showsLocalSearchInput?.focus();
     });
 
@@ -3879,7 +3904,7 @@ class ProPresenterApp {
         item.addEventListener('click', (e) => {
           if (e.target.closest('.btn-delete-folder') || e.target.closest('.btn-delete-phys-folder')) return;
           this.selectedMediaFolder = item.getAttribute('data-folder-name');
-          this.renderMediaDock(state);
+          this.renderMediaDock(store.state);
         });
       });
 
@@ -3937,8 +3962,8 @@ class ProPresenterApp {
       mediaInfo.textContent = `Carpeta: ${selectedFolderLabel}`;
     }
 
-    // 2. Filter media library by selected folder (virtual or physical) & search query
-    const normMediaQuery = this.normalizeSearchText(this.searchQuery);
+    // 2. Filter media library by selected folder (virtual or physical) & media-specific search query
+    const normMediaQuery = this.normalizeSearchText(this.mediaSearchQuery);
     const filteredMedia = state.mediaLibrary.filter(item => {
       let matchesFolder = false;
       if (this.selectedMediaFolder && this.selectedMediaFolder.startsWith('phys:')) {
@@ -3956,9 +3981,9 @@ class ProPresenterApp {
 
     const mediaQueue = Array.isArray(state.mediaQueue) ? state.mediaQueue : [];
     const queueKeyPart = mediaQueue.map(q => q.queueId + q.id + q.url).join(',');
-    const mediaGridCacheKey = JSON.stringify(filteredMedia.map(m => m.id + m.name + m.url + m.folder + (m.thumbnail ? 'thumb' : 'none'))) + '|' + this.selectedMediaFolder + '|' + this.searchQuery + '|' + queueKeyPart;
+    const mediaGridCacheKey = JSON.stringify(filteredMedia.map(m => m.id + m.name + m.url + m.folder + (m.thumbnail ? 'thumb' : 'none'))) + '|' + this.selectedMediaFolder + '|' + this.mediaSearchQuery + '|' + queueKeyPart;
 
-    if (this.lastMediaGridCacheKey !== mediaGridCacheKey) {
+    if (this.lastMediaGridCacheKey !== mediaGridCacheKey || !this.mediaGridEl.innerHTML.trim()) {
       this.lastMediaGridCacheKey = mediaGridCacheKey;
 
       if (this.mediaIntersectionObserver) {
@@ -3966,11 +3991,28 @@ class ProPresenterApp {
       }
 
       if (filteredMedia.length === 0) {
-        this.mediaGridEl.innerHTML = `
-          <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.78rem;">
-            No hay videos o imágenes en la carpeta "${selectedFolderLabel}".
-          </div>
-        `;
+        if (normMediaQuery) {
+          this.mediaGridEl.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.78rem; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+              <span>No hay coincidencias para "${this.mediaSearchQuery}" en la carpeta "${selectedFolderLabel}".</span>
+              <button type="button" id="btn-clear-media-search-inline" style="background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.4); color: var(--accent-cyan); padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 0.75rem;">Limpiar búsqueda</button>
+            </div>
+          `;
+          document.getElementById('btn-clear-media-search-inline')?.addEventListener('click', () => {
+            this.mediaSearchQuery = '';
+            if (this.dockSearchInput && this.activeResTab === 'media') {
+              this.dockSearchInput.value = '';
+            }
+            this.lastMediaGridCacheKey = null;
+            this.renderMediaDock(store.state);
+          });
+        } else {
+          this.mediaGridEl.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.78rem;">
+              No hay videos o imágenes en la carpeta "${selectedFolderLabel}".
+            </div>
+          `;
+        }
       } else {
         this.mediaGridEl.innerHTML = filteredMedia.map(item => {
           const isActive = state.activeVideoUrl === item.url && !state.isMediaCleared;

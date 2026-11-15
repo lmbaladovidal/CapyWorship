@@ -4,6 +4,14 @@ Todas las novedades, mejoras y correcciones de errores importantes de **ProPrese
 
 ---
 
+## 🚀 Versión 2.1.1 (Corrección de Visualización en Carpetas de Medios) — *15 de Noviembre, 2026*
+
+### 🐛 Correcciones
+- **Carpetas Virtuales y Físicas Siempre Visibles:** Se separó el estado de búsqueda entre *Shows* y *Media* para que filtrar canciones no oculte por error el contenido de las carpetas de medios al cambiar de pestaña.
+- **Indicador y Limpieza de Filtro en Media:** Si hay una búsqueda activa en *Media* sin coincidencias, ahora se muestra el término buscado junto con un botón **Limpiar búsqueda**, y se garantiza el refresco de la grilla al cambiar de pestaña o carpeta.
+
+---
+
 ## 🚀 Versión 2.1.0 (Templates Independientes de Versículos, Videos en Fit, Caché de Miniaturas y Estabilidad) — *15 de Noviembre, 2026*
 
 ### ✨ Novedades y Mejoras Principales
