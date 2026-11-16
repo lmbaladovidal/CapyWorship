@@ -1450,18 +1450,22 @@ export class Store {
   deleteMediaFolder(folderName) {
     if (!folderName) return;
     this.state.mediaFolders = this.state.mediaFolders.filter(f => f !== folderName);
-    const fallbackFolder = this.state.mediaFolders[0] || "";
-    if (fallbackFolder) {
-      this.state.mediaLibrary.forEach(item => {
-        if (!item.isPhysicalFolderItem && item.folder === folderName) {
-          item.folder = fallbackFolder;
+    const removedIds = new Set();
+    const removedUrls = new Set();
+    this.state.mediaLibrary.forEach(item => {
+      if (!item.isPhysicalFolderItem && item.folder === folderName) {
+        if (item.id) removedIds.add(item.id);
+        if (item.url) removedUrls.add(item.url);
+        if (typeof item.url === 'string' && item.url.startsWith('blob:')) {
+          try { URL.revokeObjectURL(item.url); } catch (e) { }
         }
-      });
-    } else {
-      // Si se eliminó la última carpeta virtual, quitar los elementos virtuales huérfanos de esa carpeta
-      this.state.mediaLibrary = this.state.mediaLibrary.filter(item =>
-        item.isPhysicalFolderItem || item.folder !== folderName
-      );
+      }
+    });
+    this.state.mediaLibrary = this.state.mediaLibrary.filter(item =>
+      item.isPhysicalFolderItem || item.folder !== folderName
+    );
+    if (Array.isArray(this.state.mediaQueue) && (removedIds.size > 0 || removedUrls.size > 0)) {
+      this.state.mediaQueue = this.state.mediaQueue.filter(q => !removedIds.has(q.id) && !removedUrls.has(q.url));
     }
     this.notify();
   }

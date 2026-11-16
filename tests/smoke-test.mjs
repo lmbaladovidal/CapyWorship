@@ -795,13 +795,17 @@ console.log('\n▶️ Grupo 17: Eliminación de Carpeta General y Caché por Lot
 test('RF-63: Eliminación de carpeta General y rehidratación por lotes de miniaturas en caché', () => {
   const store = new Store();
 
-  // 1. Verificar que se puede eliminar la carpeta "General"
+  // 1. Verificar que se puede eliminar la carpeta "General" sin mover sus videos a otra carpeta
   if (!store.state.mediaFolders.includes('General')) {
     throw new Error('General debe existir inicialmente.');
   }
+  const generalVideo = store.addMediaItem('Video General', 'file:///C:/videos/gen.mp4', 'video/mp4', 'General');
   store.deleteMediaFolder('General');
   if (store.state.mediaFolders.includes('General')) {
     throw new Error('Debe poder eliminarse la carpeta General.');
+  }
+  if (store.state.mediaLibrary.some(m => m.id === generalVideo.id)) {
+    throw new Error('Al eliminar una carpeta virtual, sus medios no deben moverse a otra carpeta.');
   }
 
   // 2. Verificar hidratación por lotes desde caché (sin regenerar ni disparar notify por cada item)

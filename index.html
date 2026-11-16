@@ -162,20 +162,29 @@
             </button>
           </div>
           
-          <div class="monitor-screen" style="position: relative; overflow: hidden; aspect-ratio: 16/9; background: #000;">
-            <video id="operator-video-preview-a" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none;"></video>
-            <video id="operator-video-preview-b" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none;"></video>
-            <img id="operator-img-preview-a" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
-            <img id="operator-img-preview-b" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
-            <img id="operator-slide-img-preview" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; opacity: 0; z-index: 1; pointer-events: none; display: none;" />
-            <div id="operator-live-text-wrapper" style="position: absolute; left: 5%; right: 5%; top: 50%; transform: translateY(-50%); text-align: center; pointer-events: none; z-index: 2;">
-              <div id="operator-live-text" class="monitor-live-text" style="color: white; line-height: 1.25;"></div>
+          <div class="monitor-screen-row">
+            <div class="monitor-screen" style="position: relative; overflow: hidden; aspect-ratio: 16/9; background: #000;">
+              <video id="operator-video-preview-a" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none;"></video>
+              <video id="operator-video-preview-b" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none;"></video>
+              <img id="operator-img-preview-a" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
+              <img id="operator-img-preview-b" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
+              <img id="operator-slide-img-preview" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; opacity: 0; z-index: 1; pointer-events: none; display: none;" />
+              <div id="operator-live-text-wrapper" style="position: absolute; left: 5%; right: 5%; top: 50%; transform: translateY(-50%); text-align: center; pointer-events: none; z-index: 2;">
+                <div id="operator-live-text" class="monitor-live-text" style="color: white; line-height: 1.25;"></div>
+              </div>
+
+              <!-- Lower Third Overlay Banner en Monitor del Operador (Fiel a la pantalla de Audiencia) -->
+              <div id="operator-lower-third-banner" style="position: absolute; bottom: 8px; left: 12px; z-index: 3; background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)); border-left: 4px solid #3b82f6; border-radius: 0 6px 6px 0; padding: 6px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.8); pointer-events: none; transition: all 0.3s ease; transform: translateX(-120%); opacity: 0; max-width: 85%;">
+                <div id="operator-lower-third-title" style="font-size: 0.78rem; font-weight: 800; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</div>
+                <div id="operator-lower-third-subtitle" style="font-size: 0.62rem; font-weight: 600; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</div>
+              </div>
             </div>
 
-            <!-- Lower Third Overlay Banner en Monitor del Operador (Fiel a la pantalla de Audiencia) -->
-            <div id="operator-lower-third-banner" style="position: absolute; bottom: 8px; left: 12px; z-index: 3; background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)); border-left: 4px solid #3b82f6; border-radius: 0 6px 6px 0; padding: 6px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.8); pointer-events: none; transition: all 0.3s ease; transform: translateX(-120%); opacity: 0; max-width: 85%;">
-              <div id="operator-lower-third-title" style="font-size: 0.78rem; font-weight: 800; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</div>
-              <div id="operator-lower-third-subtitle" style="font-size: 0.62rem; font-weight: 600; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</div>
+            <!-- Vúmetro fijo de audio a la derecha del monitor -->
+            <div id="monitor-vu-meter" class="monitor-vu-meter" title="Indicador de audio del video">
+              <div class="monitor-vu-track">
+                <div id="monitor-vu-fill" class="monitor-vu-fill"></div>
+              </div>
             </div>
           </div>
 

@@ -4,9 +4,16 @@ Este archivo registra el control de versiones, cambios granulares, mejoras y cor
 
 ---
 
-## 📌 Versión Actual: `v2.1.1` (Build 20261115.2)
+## 📌 Versión Actual: `v2.1.2` (Build 20261116.1)
 
 ### 🗓️ Registro de Cambios (Changelog Histórico)
+
+### [2.1.2] - 2026-11-16
+#### ✨ Mejoras en Grilla de Medios y Eliminación de Carpetas
+- **Alto Fijo en Miniaturas:** Se fijó el alto de `.video-card` y `grid-auto-rows` a `96px` en `.media-dock-grid` para mantener un tamaño uniforme independientemente de la cantidad de videos.
+- **Miniaturas más Limpias:** Se quitó la etiqueta de carpeta virtual y el botón `+Cola` de las tarjetas de video para reducir el ruido visual.
+- **Eliminación de Carpetas sin Reasignación:** Al eliminar una carpeta virtual, sus medios se quitan de la biblioteca en lugar de moverse automáticamente a otra carpeta.
+- **Vúmetro Fijo en Monitor de Salida:** Se agregó a la derecha de `.monitor-screen` un vúmetro vertical fijo que muestra en tiempo real si el video en reproducción tiene audio (blanco cuando el audio está en OFF; gradiente de verde a rojo cuando está ON).
 
 ### [2.1.1] - 2026-11-15
 #### 🐛 Corrección de Visualización de Carpetas de Medios

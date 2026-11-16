@@ -6,6 +6,18 @@ For detailed release notes in Spanish, please see [NOTAS_DE_VERSION.md](./NOTAS_
 
 ---
 
+## [2.1.2] - 2026-11-16
+
+### Added
+- **Fixed Monitor VU Meter:** Added `#monitor-vu-meter` next to `.monitor-screen` to visually indicate video audio activity (white when audio is OFF; green-to-red gradient when audio is ON).
+
+### Changed
+- **Fixed Media Card Height:** Set a fixed `96px` height on `.video-card` and `grid-auto-rows: 96px` on `.media-dock-grid` so thumbnail frames do not resize based on item count.
+- **Cleaner Media Thumbnails:** Removed the virtual folder badge and `+Cola` button from `.video-card-top-bar` to reduce visual clutter.
+- **Virtual Folder Deletion:** Updated `deleteMediaFolder` so deleting a virtual folder removes its virtual items from the library instead of moving them into another folder.
+
+---
+
 ## [2.1.1] - 2026-11-15
 
 ### Fixed

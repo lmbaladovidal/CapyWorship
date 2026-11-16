@@ -4,6 +4,16 @@ Todas las novedades, mejoras y correcciones de errores importantes de **ProPrese
 
 ---
 
+## 🚀 Versión 2.1.2 (Miniaturas Uniformes y Carpetas Limpias) — *16 de Noviembre, 2026*
+
+### ✨ Mejoras
+- **📐 Alto Fijo en Miniaturas de Videos:** Las tarjetas de medios mantienen siempre una altura uniforme (`96px`) sin variar según la cantidad de elementos.
+- **🧹 Miniaturas Sin Ruido Visual:** Se eliminaron la etiqueta de carpeta virtual y el botón `+Cola` dentro de cada miniatura.
+- **🗑️ Eliminación Directa de Carpetas:** Al borrar una carpeta virtual, los medios que contiene ya no se mueven a otra carpeta.
+- **🎚️ Vúmetro de Audio en Monitor en Vivo:** Se añadió un vúmetro vertical fijo a la derecha del monitor del operador para visualizar si el video tiene audio (en blanco cuando está en OFF y de verde a rojo cuando está ON).
+
+---
+
 ## 🚀 Versión 2.1.1 (Corrección de Visualización en Carpetas de Medios) — *15 de Noviembre, 2026*
 
 ### 🐛 Correcciones

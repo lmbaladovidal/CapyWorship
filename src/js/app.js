@@ -262,6 +262,8 @@ class ProPresenterApp {
       });
     });
 
+    this.initMonitorVuMeter();
+
     const timelineSlider = document.getElementById('input-media-timeline');
     const btnTimelinePlayPause = document.getElementById('btn-timeline-play-pause');
     const btnTimelineRestart = document.getElementById('btn-timeline-restart');
@@ -1543,6 +1545,94 @@ class ProPresenterApp {
       this.lastQueueAdvanceTime = now;
       store.advanceMediaQueue();
     }
+  }
+
+  initMonitorVuMeter() {
+    if (this._vuMeterInterval) {
+      clearInterval(this._vuMeterInterval);
+    }
+    this._vuLastVideoSrc = '';
+    this._vuLastDecodedBytes = 0;
+    this._vuHasAudioDetected = false;
+    this._vuSmoothedLevel = 0;
+    this._vuMeterInterval = setInterval(() => {
+      this.updateMonitorVuMeter(store.state);
+    }, 100);
+    this.updateMonitorVuMeter(store.state);
+  }
+
+  updateMonitorVuMeter(state = store.state) {
+    const vuMeter = document.getElementById('monitor-vu-meter');
+    const vuFill = document.getElementById('monitor-vu-fill');
+    if (!vuMeter || !vuFill) return;
+
+    const isMuted = !!state.isMediaAudioMuted;
+    const volume = typeof state.mediaAudioVolume === 'number' ? state.mediaAudioVolume : 1.0;
+    const isAudioOff = isMuted || volume <= 0;
+    vuMeter.classList.toggle('is-muted', isAudioOff);
+
+    const isCleared = !!state.isMediaCleared || !state.activeVideoUrl;
+    const isImage = !isCleared && (
+      (state.activeVideoType && state.activeVideoType.startsWith('image/')) ||
+      (state.activeVideoIsImage && !state.activeVideoType?.startsWith('video/')) ||
+      !!(state.activeVideoUrl && (state.activeVideoUrl.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i) || state.activeVideoUrl.startsWith('data:image/')))
+    );
+
+    if (isCleared || isImage) {
+      this._vuSmoothedLevel = 0;
+      vuFill.style.height = '0%';
+      vuMeter.title = isAudioOff ? 'Audio en OFF' : 'Sin video en reproducción';
+      return;
+    }
+
+    const video = this.getActiveOperatorVideo();
+    if (!video || !video.src) {
+      this._vuSmoothedLevel = 0;
+      vuFill.style.height = '0%';
+      return;
+    }
+
+    if (this._vuLastVideoSrc !== video.src) {
+      this._vuLastVideoSrc = video.src;
+      this._vuLastDecodedBytes = typeof video.webkitAudioDecodedByteCount === 'number' ? video.webkitAudioDecodedByteCount : 0;
+      this._vuHasAudioDetected = !!(video.audioTracks && video.audioTracks.length > 0);
+      this._vuSmoothedLevel = 0;
+    }
+
+    let delta = 0;
+    if (typeof video.webkitAudioDecodedByteCount === 'number') {
+      const currentBytes = video.webkitAudioDecodedByteCount;
+      delta = Math.max(0, currentBytes - (this._vuLastDecodedBytes || 0));
+      this._vuLastDecodedBytes = currentBytes;
+      if (delta > 0 || currentBytes > 0) {
+        this._vuHasAudioDetected = true;
+      }
+    } else if (video.audioTracks && video.audioTracks.length > 0) {
+      this._vuHasAudioDetected = true;
+      delta = 1024;
+    }
+
+    if (video.paused || video.ended || video.readyState < 2 || !this._vuHasAudioDetected) {
+      this._vuSmoothedLevel = Math.max(0, this._vuSmoothedLevel * 0.5);
+      vuFill.style.height = `${Math.round(this._vuSmoothedLevel)}%`;
+      vuMeter.title = this._vuHasAudioDetected
+        ? (isAudioOff ? 'Video con audio (Pausado / OFF)' : 'Video con audio (Pausado)')
+        : 'Video sin pista de audio';
+      return;
+    }
+
+    // Nivel dinámico basado en actividad de decodificación de audio y volumen configurado
+    const normActivity = delta > 0 ? Math.min(1, 0.35 + (Math.log10(delta + 10) / 5.2)) : 0.45;
+    const jitter = 0.85 + Math.random() * 0.25;
+    const targetLevel = isAudioOff
+      ? Math.min(82, Math.max(28, Math.round(normActivity * 72 * jitter)))
+      : Math.min(98, Math.max(12, Math.round(normActivity * volume * 92 * jitter)));
+
+    this._vuSmoothedLevel = this._vuSmoothedLevel * 0.35 + targetLevel * 0.65;
+    vuFill.style.height = `${Math.round(this._vuSmoothedLevel)}%`;
+    vuMeter.title = isAudioOff
+      ? 'Video con audio (Salida en OFF)'
+      : `Video con audio activo (${Math.round(volume * 100)}%)`;
   }
 
   getActiveOperatorVideo() {
@@ -3914,9 +4004,7 @@ class ProPresenterApp {
           const folderToDelete = btn.getAttribute('data-folder');
           const remainingFolders = (store.state.mediaFolders || []).filter(f => f !== folderToDelete);
           const nextFolder = remainingFolders[0] || (physicalFolders[0] ? `phys:${physicalFolders[0].path}` : '');
-          const msg = remainingFolders.length > 0
-            ? `¿Estás seguro de eliminar la carpeta virtual "${folderToDelete}"? Los medios asignados pasarán a "${remainingFolders[0]}".`
-            : `¿Estás seguro de eliminar la última carpeta virtual "${folderToDelete}"? Se quitarán los medios virtuales de esa carpeta.`;
+          const msg = `¿Estás seguro de eliminar la carpeta virtual "${folderToDelete}" y quitar los medios que contiene de la biblioteca?`;
           if (confirm(msg)) {
             if (this.selectedMediaFolder === folderToDelete) {
               this.selectedMediaFolder = nextFolder;
@@ -4045,12 +4133,10 @@ class ProPresenterApp {
             <div class="video-card ${isActive ? 'active-video' : ''} ${isQueued ? 'queued-video' : ''}" data-media-id="${item.id}" data-video-url="${item.url}" data-video-name="${item.name}" data-video-type="${item.type || ''}" title="Clic: Proyectar ahora • Alt + Clic: Agregar a la cola de reproducción">
               <div class="video-card-top-bar">
                 <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
-                  <span class="video-folder-tag">${item.folder || 'General'}</span>
                   ${typeBadge}
                   ${queueBadgeHTML}
                 </div>
                 <div style="display: flex; align-items: center; gap: 4px;">
-                  <button type="button" class="btn-queue-media-card" data-queue-media-id="${item.id}" title="Sumar a la cola (Alt + Click)">+Cola</button>
                   <button class="btn-delete-media" data-media-id="${item.id}" title="Eliminar este elemento">&times;</button>
                 </div>
               </div>
@@ -5796,6 +5882,7 @@ class ProPresenterApp {
     if (videoVolBadge) {
       videoVolBadge.textContent = `${audioVol}%`;
     }
+    this.updateMonitorVuMeter(state);
 
     // Apply live transition timing CSS to operator live preview
     if (this.liveTextEl) {
