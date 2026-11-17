@@ -5,7 +5,7 @@
 import { store, DEFAULT_TEMPLATES, parseAndSplitText } from './state.js';
 import { sync } from './broadcast.js';
 import { stageManager } from './stage-manager.js';
-import { BIBLE_BOOKS, BIBLE_VERSIONS, getAllBibleVersions, getChapterVerses, splitVerseText, fetchAndLoadBibleFromUrl, parseAndAddCustomBible, deleteCustomBible } from './bible-data.js';
+import { BIBLE_BOOKS, BIBLE_VERSIONS, getAllBibleVersions, getChapterVerses, splitVerseText, fetchAndLoadBibleFromUrl, parseAndAddCustomBible, deleteCustomBible, DEFAULT_SNAPSHOT_BIBLES, fetchAvailableSnapshotBibles, isSnapshotBibleInstalled } from './bible-data.js';
 import { searchSongsOnline } from './song-search.js';
 import { calendarManager } from './calendar-manager.js';
 import { MediaCache } from './media-cache.js';
@@ -4977,18 +4977,133 @@ class ProPresenterApp {
     const inputUrl = document.getElementById('input-bible-url');
     const statusEl = document.getElementById('bible-load-status');
     const fileLabel = document.getElementById('label-selected-bible-file');
+    const catalogListEl = document.getElementById('bible-catalog-list');
+    const catalogSearchEl = document.getElementById('input-bible-catalog-search');
+    const langFilterBtns = document.querySelectorAll('.btn-bible-lang-filter');
 
     let loadedFileJSON = null;
+    let catalogItems = [...DEFAULT_SNAPSHOT_BIBLES];
+    let activeCatalogLang = 'ALL';
+    let catalogQuery = '';
+
+    const renderCatalog = () => {
+      if (!catalogListEl) return;
+      const installed = getAllBibleVersions();
+      const normQ = this.normalizeSearchText(catalogQuery);
+
+      const available = catalogItems.filter(item => {
+        if (isSnapshotBibleInstalled(item, installed)) return false;
+        if (activeCatalogLang !== 'ALL' && item.lang !== activeCatalogLang) return false;
+        if (normQ) {
+          const haystack = this.normalizeSearchText(`${item.abbr} ${item.name} ${item.lang}`);
+          if (!haystack.includes(normQ)) return false;
+        }
+        return true;
+      });
+
+      if (available.length === 0) {
+        catalogListEl.innerHTML = `
+          <div style="padding: 18px; text-align: center; font-size: 0.76rem; color: var(--text-muted);">
+            ${catalogItems.every(it => isSnapshotBibleInstalled(it, installed))
+              ? 'Todas las biblias del catálogo ya están instaladas.'
+              : 'No hay biblias disponibles sin instalar que coincidan con el filtro.'}
+          </div>
+        `;
+        return;
+      }
+
+      catalogListEl.innerHTML = available.map(item => `
+        <div class="bible-catalog-row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 6px; background: var(--bg-card); border: 1px solid var(--border-color);">
+          <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+            <span style="background: rgba(255, 122, 0, 0.18); color: var(--color-brand-amber); border: 1px solid rgba(255, 122, 0, 0.45); font-size: 0.68rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; flex-shrink: 0;">${item.abbr}</span>
+            <div style="min-width: 0; flex: 1;">
+              <div style="font-size: 0.78rem; font-weight: 600; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.name}">${item.name}</div>
+              <div style="font-size: 0.66rem; color: var(--text-muted);">${item.lang} • ${item.books} libros</div>
+            </div>
+          </div>
+          <button type="button" class="btn-install-catalog-bible" data-bible-url="${item.url}" data-bible-name="${item.name.replace(/"/g, '&quot;')}" style="background: var(--color-brand-orange); color: #FFFFFF; border: none; border-radius: 6px; padding: 5px 11px; font-size: 0.72rem; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: background-color 150ms ease;">
+            Instalar
+          </button>
+        </div>
+      `).join('');
+
+      catalogListEl.querySelectorAll('.btn-install-catalog-bible').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const targetUrl = btn.getAttribute('data-bible-url');
+          const targetName = btn.getAttribute('data-bible-name');
+          if (!targetUrl) return;
+          btn.disabled = true;
+          btn.textContent = 'Instalando...';
+          btn.style.opacity = '0.7';
+          if (statusEl) {
+            statusEl.textContent = `⏳ Descargando "${targetName}"...`;
+            statusEl.style.color = 'var(--color-brand-amber)';
+            statusEl.style.display = 'block';
+          }
+          try {
+            const newBible = await fetchAndLoadBibleFromUrl(targetUrl);
+            if (newBible) {
+              this.selectedBibleVersion = newBible.id;
+              this.lastBibleSidebarCacheKey = null;
+              this.renderScriptureSubSidebar();
+              this.renderScripture3ColView();
+              renderCatalog();
+              if (statusEl) {
+                statusEl.textContent = `✓ "${newBible.name}" instalada correctamente.`;
+                statusEl.style.color = '#34d399';
+                statusEl.style.display = 'block';
+              }
+              this.showToast(`Biblia "${newBible.name}" instalada.`, "success");
+            }
+          } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Instalar';
+            btn.style.opacity = '1';
+            if (statusEl) {
+              statusEl.textContent = `❌ Error al instalar: ${err.message}`;
+              statusEl.style.color = '#f87171';
+              statusEl.style.display = 'block';
+            }
+          }
+        });
+      });
+    };
+
+    langFilterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCatalogLang = btn.getAttribute('data-lang') || 'ALL';
+        langFilterBtns.forEach(b => {
+          const isAct = b === btn;
+          b.classList.toggle('active', isAct);
+          b.style.background = isAct ? 'var(--color-brand-orange)' : 'transparent';
+          b.style.borderColor = isAct ? 'var(--color-brand-orange)' : 'var(--border-color)';
+          b.style.color = isAct ? '#FFFFFF' : 'var(--text-muted)';
+        });
+        renderCatalog();
+      });
+    });
+
+    catalogSearchEl?.addEventListener('input', (e) => {
+      catalogQuery = e.target.value || '';
+      renderCatalog();
+    });
 
     const openModal = () => {
       this.closeAllModals();
       if (modal) {
         modal.classList.add('open');
-        this.ensureModalInteractive(modal, inputUrl);
+        this.ensureModalInteractive(modal, catalogSearchEl || inputUrl);
       }
       if (statusEl) statusEl.style.display = 'none';
       loadedFileJSON = null;
       if (fileLabel) fileLabel.textContent = 'Ningún archivo seleccionado';
+      renderCatalog();
+      fetchAvailableSnapshotBibles().then(list => {
+        if (Array.isArray(list) && list.length > 0) {
+          catalogItems = list;
+          renderCatalog();
+        }
+      }).catch(() => {});
     };
 
     const closeModal = () => {

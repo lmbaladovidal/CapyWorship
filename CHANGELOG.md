@@ -6,6 +6,17 @@ For detailed release notes in Spanish, please see [NOTAS_DE_VERSION.md](./NOTAS_
 
 ---
 
+## [2.2.0] - 2026-11-16
+
+### Added
+- **Online Bible Catalog:** Added live discovery (`fetchAvailableSnapshotBibles`) and built-in catalog (`DEFAULT_SNAPSHOT_BIBLES`) from `mrk214.github.io/snapshots/` in `#modal-load-bible`, filtering out already-installed versions (`isSnapshotBibleInstalled`) with language filters (`ALL/ES/EN/PT`), search, and one-click installation.
+- **CapyWorship / MULTIMEDIOS Branding:** Applied the `design_system_multimedios.md` palette (`#1A2B4C`, `#121E36`, `#FF7A00`, `#FFAE42`), typography (`Plus Jakarta Sans`, `Montserrat`), circular capybara isotipo (`branding/icon.png` / `public/icon.png`), and equalizer motif.
+
+### Changed
+- **App Identity & Header:** Renamed the application to **CapyWorship** (*MULTIMEDIOS • Tech for the Kingdom*) across `index.html`, `audience.html`, `stage.html`, `main.js`, and `package.json`, and removed the static `File / Edit / View / Help` menu bar.
+
+---
+
 ## [2.1.2] - 2026-11-16
 
 ### Added

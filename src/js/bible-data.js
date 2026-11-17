@@ -195,9 +195,87 @@ export function getAllBibleVersions() {
     id: id,
     name: CUSTOM_BIBLES[id].name,
     tag: CUSTOM_BIBLES[id].tag || "JSON",
+    sourceUrl: CUSTOM_BIBLES[id].sourceUrl || "",
     isCustom: true
   }));
   return [...BIBLE_VERSIONS.map(v => ({ ...v, isCustom: false })), ...customList];
+}
+
+export const SNAPSHOTS_INDEX_URL = "https://mrk214.github.io/snapshots/";
+
+export const DEFAULT_SNAPSHOT_BIBLES = [
+  { abbr: "RVR1960", name: "Biblia Reina Valera 1960", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/RVR1960_vid_149.json" },
+  { abbr: "NVI", name: "Nueva Versión Internacional - Español", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/NVI_vid_128.json" },
+  { abbr: "NTV", name: "Nueva Traducción Viviente", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/NTV_vid_127.json" },
+  { abbr: "DHH94I", name: "Biblia Dios Habla Hoy", books: 75, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/DHH94I_vid_52.json" },
+  { abbr: "DHHS94", name: "Dios habla Hoy Estándar", books: 75, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/DHHS94_vid_1846.json" },
+  { abbr: "LBLA", name: "La Biblia de las Américas", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/LBLA_vid_89.json" },
+  { abbr: "NBLA", name: "Nueva Biblia de las Américas", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/NBLA_vid_103.json" },
+  { abbr: "RVA2015", name: "Reina Valera Actualizada", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/RVA2015_vid_1782.json" },
+  { abbr: "RVC", name: "Reina Valera Contemporánea", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/RVC_vid_146.json" },
+  { abbr: "TLA", name: "Traducción en Lenguaje Actual", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/TLA_vid_176.json" },
+  { abbr: "TLAI", name: "Traducción en Lenguaje Actual Interconfesional", books: 78, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa/TLAI_vid_178.json" },
+  { abbr: "NVI-ES", name: "Nueva Versión Internacional - Castellano", books: 66, lang: "ES", url: "https://mrk214.github.io/snapshots/es___spa___spa_es/NVI_vid_1637.json" },
+  { abbr: "ESV", name: "English Standard Version 2016", books: 66, lang: "EN", url: "https://mrk214.github.io/snapshots/en___eng___eng/ESV_vid_59.json" },
+  { abbr: "NIV", name: "New International Version", books: 66, lang: "EN", url: "https://mrk214.github.io/snapshots/en___eng___eng/NIV_vid_111.json" },
+  { abbr: "NLT", name: "New Living Translation", books: 66, lang: "EN", url: "https://mrk214.github.io/snapshots/en___eng___eng/NLT_vid_116.json" },
+  { abbr: "KJV", name: "King James Version", books: 66, lang: "EN", url: "https://mrk214.github.io/snapshots/en___eng___eng/KJV_vid_1.json" },
+  { abbr: "NKJV", name: "New King James Version", books: 66, lang: "EN", url: "https://mrk214.github.io/snapshots/en___eng___eng/NKJV_vid_114.json" },
+  { abbr: "CSB", name: "Christian Standard Bible", books: 66, lang: "EN", url: "https://mrk214.github.io/snapshots/en___eng___eng/CSB_vid_1713.json" },
+  { abbr: "NASB2020", name: "New American Standard Bible - NASB", books: 66, lang: "EN", url: "https://mrk214.github.io/snapshots/en___eng___eng/NASB2020_vid_2692.json" },
+  { abbr: "NVI-PT", name: "Nova Versão Internacional 2011", books: 66, lang: "PT", url: "https://mrk214.github.io/snapshots/pt___por___por/NVI_vid_4360.json" },
+  { abbr: "A21", name: "Biblia Almeida Século 21", books: 66, lang: "PT", url: "https://mrk214.github.io/snapshots/pt___por___por/A21_vid_2645.json" },
+  { abbr: "ARA", name: "Almeida Revista e Atualizada", books: 66, lang: "PT", url: "https://mrk214.github.io/snapshots/pt___por___por/ARA_vid_1608.json" },
+  { abbr: "ARC", name: "Almeida Revista e Corrigida", books: 66, lang: "PT", url: "https://mrk214.github.io/snapshots/pt___por___por/ARC_vid_212.json" },
+  { abbr: "NAA", name: "Nova Almeida Atualizada", books: 66, lang: "PT", url: "https://mrk214.github.io/snapshots/pt___por___por/NAA_vid_1840.json" },
+  { abbr: "NTLH", name: "Nova Tradução na Linguagem de Hoje", books: 66, lang: "PT", url: "https://mrk214.github.io/snapshots/pt___por___por/NTLH_vid_211.json" },
+  { abbr: "ARC-PT", name: "Almeida Revista e Corrigida (Portugal)", books: 66, lang: "PT", url: "https://mrk214.github.io/snapshots/pt___por___por_pt/ARC_vid_215.json" }
+];
+
+export function isSnapshotBibleInstalled(item, installedList = getAllBibleVersions()) {
+  if (!item) return false;
+  const targetUrl = (item.url || "").trim();
+  const targetAbbr = (item.abbr || "").toUpperCase();
+  const targetLang = (item.lang || "").toUpperCase();
+  const targetName = (item.name || "").trim().toLowerCase();
+
+  return installedList.some(v => {
+    if (v.sourceUrl && targetUrl && v.sourceUrl === targetUrl) return true;
+    const vId = (v.id || "").toUpperCase();
+    const vTag = (v.tag || "").toUpperCase();
+    const vName = (v.name || "").trim().toLowerCase();
+    if (vName && targetName && vName === targetName) return true;
+    if (vId === targetAbbr && (!targetLang || vTag === targetLang)) return true;
+    return false;
+  });
+}
+
+export async function fetchAvailableSnapshotBibles() {
+  try {
+    const response = await fetch(SNAPSHOTS_INDEX_URL);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const html = await response.text();
+    const rowRegex = /<tr>\s*<td><code[^>]*>([^<]+)<\/code><\/td>\s*<td>([^<]+)<\/td>\s*<td[^>]*>(?:<strong>)?(\d+)(?:<\/strong>)?<\/td>\s*<td><a href="([^"]+\.json)">json<\/a><\/td>\s*<\/tr>/gi;
+    const parsed = [];
+    let match;
+    while ((match = rowRegex.exec(html)) !== null) {
+      const abbr = match[1].trim();
+      const name = match[2].trim();
+      const books = parseInt(match[3], 10) || 66;
+      const url = match[4].trim();
+      let lang = "OT";
+      if (url.includes("/es___")) lang = "ES";
+      else if (url.includes("/en___")) lang = "EN";
+      else if (url.includes("/pt___")) lang = "PT";
+      parsed.push({ abbr, name, books, lang, url });
+    }
+    if (parsed.length > 0) {
+      return parsed;
+    }
+  } catch (err) {
+    console.warn("No se pudo actualizar el índice online de snapshots, usando catálogo integrado:", err);
+  }
+  return DEFAULT_SNAPSHOT_BIBLES;
 }
 
 export function deleteCustomBible(versionId) {

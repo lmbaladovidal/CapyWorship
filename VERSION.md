@@ -4,9 +4,14 @@ Este archivo registra el control de versiones, cambios granulares, mejoras y cor
 
 ---
 
-## 📌 Versión Actual: `v2.1.2` (Build 20261116.1)
+## 📌 Versión Actual: `v2.2.0` (Build 20261116.2)
 
 ### 🗓️ Registro de Cambios (Changelog Histórico)
+
+### [2.2.0] - 2026-11-16
+#### ✨ Rebranding CapyWorship (MULTIMEDIOS) y Catálogo de Biblias Online
+- **Identidad Visual CapyWorship / MULTIMEDIOS:** Redefinición completa de tokens de diseño (`#1A2B4C`, `#121E36`, `#FF7A00`, `#FFAE42`), tipografía (`Plus Jakarta Sans` / `Montserrat`), isotipo del carpincho como ícono de app y favicon, y header limpio con *"MULTIMEDIOS • Tech for the Kingdom"* (sin menú `File/Edit/View/Help`).
+- **Catálogo de Biblias Disponibles:** El modal de carga de Biblias lista automáticamente las versiones disponibles desde `mrk214.github.io/snapshots/` que aún no están instaladas, con filtro por idioma (`ES/EN/PT`), buscador e instalación en 1 clic.
 
 ### [2.1.2] - 2026-11-16
 #### ✨ Mejoras en Grilla de Medios y Eliminación de Carpetas

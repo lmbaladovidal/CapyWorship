@@ -1,6 +1,6 @@
 {
   "name": "propresenter-ai-studio",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "description": "Estación de control multimedia de escritorio para proyección multipantalla, transmisión en vivo, monitor de escenario, calendario de eventos y gestor de escrituras.",
   "main": "main.js",
   "author": "ProPresenter AI Studio Team",
@@ -22,17 +22,18 @@
     "electron:dev": "vite",
     "electron:start": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder",
-    "package:exe": "npm run build && electron-packager . \"ProPresenter AI Studio\" --platform=win32 --arch=x64 --out=release-builds --overwrite"
+    "package:exe": "npm run build && electron-packager . \"CapyWorship\" --platform=win32 --arch=x64 --out=release-builds --overwrite"
   },
   "build": {
     "appId": "com.propresenter.aistudio",
-    "productName": "ProPresenter AI Studio",
+    "productName": "CapyWorship",
     "directories": {
       "output": "dist-electron"
     },
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "branding/**/*",
       "main.js",
       "preload.js",
       "package.json"
@@ -48,7 +49,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ProPresenter AI Studio"
+      "shortcutName": "CapyWorship"
     }
   },
   "devDependencies": {

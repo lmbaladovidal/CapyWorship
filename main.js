@@ -52,10 +52,10 @@ function createMainWindow() {
     height: Math.min(768, height),
     minWidth: 1024,
     minHeight: 640,
-    title: "ProPresenter AI Studio - Production Control",
-    backgroundColor: '#0a0c10',
+    title: "CapyWorship — Tech for the Kingdom",
+    backgroundColor: '#121E36',
     autoHideMenuBar: true,
-    icon: path.join(__dirname, 'public/favicon.ico'),
+    icon: path.join(__dirname, 'branding/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -106,7 +106,7 @@ function openAudienceWindow() {
     fullscreen: displays.length > 1, // Auto-fullscreen on secondary screen
     frame: false,
     autoHideMenuBar: true,
-    title: "ProPresenter AI Studio - Salida Audiencia (OBS / Proyector)",
+    title: "CapyWorship - Salida Audiencia (OBS / Proyector)",
     backgroundColor: '#000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -157,7 +157,7 @@ function openStageWindow() {
     fullscreen: displays.length > 2,
     frame: false,
     autoHideMenuBar: true,
-    title: "ProPresenter AI Studio - Stage Display (Monitor Orador)",
+    title: "CapyWorship - Stage Display (Monitor Orador)",
     backgroundColor: '#000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

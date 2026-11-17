@@ -4,6 +4,14 @@ Todas las novedades, mejoras y correcciones de errores importantes de **ProPrese
 
 ---
 
+## 🚀 Versión 2.2.0 (CapyWorship — Identidad MULTIMEDIOS y Catálogo de Biblias) — *16 de Noviembre, 2026*
+
+### ✨ Novedades
+- **🦫 Nueva Identidad CapyWorship (MULTIMEDIOS):** Nuevo nombre de aplicación **CapyWorship** con el lema *"Tech for the Kingdom"*, paleta oficial Navy & Naranja (`#1A2B4C`, `#FF7A00`, `#FFAE42`), nuevo ícono de aplicación y barra superior simplificada.
+- **📖 Catálogo de Biblias en 1 Clic:** Al abrir el gestor para agregar Biblias, ahora se listan directamente las versiones disponibles de `mrk214.github.io/snapshots/` que aún no están instaladas, con filtros por idioma (*Español*, *English*, *Português*) y buscador instantáneo.
+
+---
+
 ## 🚀 Versión 2.1.2 (Miniaturas Uniformes y Carpetas Limpias) — *16 de Noviembre, 2026*
 
 ### ✨ Mejoras
