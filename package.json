@@ -39,6 +39,7 @@
       "package.json"
     ],
     "win": {
+      "icon": "branding/icon.ico",
       "target": [
         "nsis",
         "portable"
@@ -49,7 +50,10 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "CapyWorship"
+      "shortcutName": "CapyWorship",
+      "installerIcon": "branding/icon.ico",
+      "uninstallerIcon": "branding/icon.ico",
+      "installerHeaderIcon": "branding/icon.ico"
     }
   },
   "devDependencies": {
