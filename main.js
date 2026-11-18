@@ -65,7 +65,7 @@ function createSplashWindow() {
     alwaysOnTop: true,
     center: true,
     show: false,
-    icon: path.join(__dirname, 'branding/icon.png'),
+    icon: path.join(__dirname, 'Branding/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -98,8 +98,8 @@ function revealMainWindow() {
     splashFallbackTimer = null;
   }
 
-  const MIN_SPLASH_MS = 1600;
-  const elapsed = splashShownAt ? Date.now() - splashShownAt : MIN_SPLASH_MS;
+  const MIN_SPLASH_MS = 2000;
+  const elapsed = splashShownAt ? Date.now() - splashShownAt : 0;
   const waitMs = Math.max(0, MIN_SPLASH_MS - elapsed);
 
   setTimeout(() => {
@@ -146,7 +146,7 @@ function createMainWindow() {
     title: "CapyWorship — Tech for the Kingdom",
     backgroundColor: '#121E36',
     autoHideMenuBar: true,
-    icon: path.join(__dirname, 'branding/icon.png'),
+    icon: path.join(__dirname, 'Branding/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,

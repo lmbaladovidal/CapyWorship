@@ -33,13 +33,13 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "branding/**/*",
+      "Branding/**/*",
       "main.js",
       "preload.js",
       "package.json"
     ],
     "win": {
-      "icon": "branding/icon.ico",
+      "icon": "Branding/icon.ico",
       "target": [
         "nsis",
         "portable"
@@ -51,9 +51,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "CapyWorship",
-      "installerIcon": "branding/icon.ico",
-      "uninstallerIcon": "branding/icon.ico",
-      "installerHeaderIcon": "branding/icon.ico"
+      "installerIcon": "Branding/icon.ico",
+      "uninstallerIcon": "Branding/icon.ico",
+      "installerHeaderIcon": "Branding/icon.ico"
     }
   },
   "devDependencies": {
