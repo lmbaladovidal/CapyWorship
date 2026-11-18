@@ -283,9 +283,14 @@ export class MediaCache {
         video.preload = 'auto';
 
         let finished = false;
+        let seekFallbackTimer = null;
         const cleanup = () => {
           if (!finished) {
             finished = true;
+            if (seekFallbackTimer) {
+              clearTimeout(seekFallbackTimer);
+              seekFallbackTimer = null;
+            }
             video.pause();
             video.removeAttribute('src');
             video.load();
@@ -299,6 +304,7 @@ export class MediaCache {
         }, 6000);
 
         const captureFrame = () => {
+          if (finished) return;
           try {
             const canvas = document.createElement('canvas');
             canvas.width = 320;
@@ -317,9 +323,27 @@ export class MediaCache {
         };
 
         video.onloadeddata = () => {
+          if (finished) return;
           try {
-            // Seek a 0.5s o al 10% del video para evitar capturar un cuadro negro inicial
-            const seekTime = video.duration && video.duration > 1.5 ? Math.min(1.0, video.duration * 0.1) : 0.2;
+            const dur = video.duration;
+            const canSeek = Number.isFinite(dur) && dur > 0.3 && (!video.seekable || video.seekable.length > 0);
+            if (!canSeek) {
+              captureFrame();
+              return;
+            }
+
+            // Seek al 10% (máx 1s) en videos largos, o 25% (máx 0.15s) en clips muy cortos
+            const seekTime = dur > 1.5 ? Math.min(1.0, dur * 0.1) : Math.min(0.15, dur * 0.25);
+            if (seekTime <= 0.01) {
+              captureFrame();
+              return;
+            }
+
+            // Si onseeked no responde en 1.2s (común en MP4 sin tabla de seek), capturar el primer frame
+            seekFallbackTimer = setTimeout(() => {
+              captureFrame();
+            }, 1200);
+
             video.currentTime = seekTime;
           } catch (e) {
             captureFrame();

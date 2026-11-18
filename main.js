@@ -36,12 +36,102 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 
 let mainWindow = null;
+let splashWindow = null;
 let audienceWindow = null;
 let stageWindow = null;
+let splashShownAt = 0;
+let isMainRevealed = false;
+let splashFallbackTimer = null;
 
 const isDev = process.env.NODE_ENV === 'development' || (!app.isPackaged && process.env.NODE_ENV !== 'production');
 const DEV_PORT = process.env.PORT || 3000;
 const DEV_URL = `http://localhost:${DEV_PORT}`;
+
+function sendSplashStatus(message, progress) {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents.send('splash-status', { message, progress });
+  }
+}
+
+function createSplashWindow() {
+  if (splashWindow && !splashWindow.isDestroyed()) return;
+
+  splashWindow = new BrowserWindow({
+    width: 600,
+    height: 340,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    center: true,
+    show: false,
+    icon: path.join(__dirname, 'branding/icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  splashWindow.loadFile(path.join(__dirname, 'electron/splash.html'), {
+    query: { v: app.getVersion() }
+  });
+
+  splashWindow.once('ready-to-show', () => {
+    splashShownAt = Date.now();
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.show();
+    }
+  });
+
+  splashWindow.on('closed', () => {
+    splashWindow = null;
+  });
+}
+
+function revealMainWindow() {
+  if (isMainRevealed) return;
+  isMainRevealed = true;
+
+  if (splashFallbackTimer) {
+    clearTimeout(splashFallbackTimer);
+    splashFallbackTimer = null;
+  }
+
+  const MIN_SPLASH_MS = 1600;
+  const elapsed = splashShownAt ? Date.now() - splashShownAt : MIN_SPLASH_MS;
+  const waitMs = Math.max(0, MIN_SPLASH_MS - elapsed);
+
+  setTimeout(() => {
+    sendSplashStatus('¡Sistema listo! Abriendo estudio...', 100);
+
+    setTimeout(() => {
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.send('splash-fade-out');
+      }
+
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+          mainWindow.maximize();
+          mainWindow.focus();
+        }
+
+        if (splashWindow && !splashWindow.isDestroyed()) {
+          splashWindow.close();
+        }
+
+        // Auto-launch Audience Window on secondary screen if multiple displays are connected
+        const displays = screen.getAllDisplays();
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const hasSecondaryDisplay = displays.some(d => d.id !== primaryDisplay.id);
+        if (hasSecondaryDisplay) {
+          openAudienceWindow();
+        }
+      }, 320);
+    }, 480);
+  }, waitMs);
+}
 
 function createMainWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -52,6 +142,7 @@ function createMainWindow() {
     height: Math.min(768, height),
     minWidth: 1024,
     minHeight: 640,
+    show: false,
     title: "CapyWorship — Tech for the Kingdom",
     backgroundColor: '#121E36',
     autoHideMenuBar: true,
@@ -64,7 +155,18 @@ function createMainWindow() {
     }
   });
 
-  mainWindow.maximize();
+  mainWindow.webContents.on('did-start-loading', () => {
+    sendSplashStatus('Cargando interfaz de CapyWorship...', 28);
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    sendSplashStatus('Inicializando módulos de proyección...', 48);
+  });
+
+  if (splashFallbackTimer) clearTimeout(splashFallbackTimer);
+  splashFallbackTimer = setTimeout(() => {
+    revealMainWindow();
+  }, 12000);
 
   let usingLocalDist = !isDev;
 
@@ -82,6 +184,7 @@ function createMainWindow() {
     for (const folderPath of physicalFolderWatchers.keys()) {
       unwatchPhysicalFolder(folderPath);
     }
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
     if (audienceWindow) audienceWindow.close();
     if (stageWindow) stageWindow.close();
   });
@@ -500,20 +603,28 @@ ipcMain.on('broadcast-update', (event, state) => {
   }
 });
 
+// Splash Banner Startup IPC
+ipcMain.on('splash-status', (_event, payload) => {
+  if (payload && payload.message) {
+    sendSplashStatus(payload.message, payload.progress);
+  }
+});
+
+ipcMain.on('app-ready', () => {
+  revealMainWindow();
+});
+
 app.whenReady().then(() => {
+  isMainRevealed = false;
+  createSplashWindow();
   createMainWindow();
 
-  // Auto-launch Audience Window on secondary screen if multiple displays are connected
-  const displays = screen.getAllDisplays();
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const hasSecondaryDisplay = displays.some(d => d.id !== primaryDisplay.id);
-
-  if (hasSecondaryDisplay) {
-    openAudienceWindow();
-  }
-
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      isMainRevealed = false;
+      createSplashWindow();
+      createMainWindow();
+    }
   });
 });
 

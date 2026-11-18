@@ -52,6 +52,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on('presentation-import-progress', handler);
     return () => ipcRenderer.removeListener('presentation-import-progress', handler);
+  },
+  // Splash Banner Startup Lifecycle
+  sendSplashStatus: (message, progress) => ipcRenderer.send('splash-status', { message, progress }),
+  notifyAppReady: () => ipcRenderer.send('app-ready'),
+  onSplashStatus: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('splash-status', handler);
+    return () => ipcRenderer.removeListener('splash-status', handler);
+  },
+  onSplashFadeOut: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('splash-fade-out', handler);
+    return () => ipcRenderer.removeListener('splash-fade-out', handler);
   }
 });
 

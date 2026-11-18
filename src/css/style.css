@@ -3399,15 +3399,61 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   margin-top: 6px;
 }
 
-.monitor-transport-btn {
+.media-speed-control {
   flex: 1;
-  height: 26px;
-  font-size: 0.72rem;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  background: rgba(18, 30, 54, 0.85);
+  border: 1px solid rgba(216, 224, 232, 0.22);
+  border-radius: 6px;
+}
+
+.media-speed-label {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-brand-amber);
+  flex-shrink: 0;
+}
+
+.media-speed-slider {
+  flex: 1;
+  min-width: 60px;
+  height: 4px;
+  accent-color: var(--color-brand-orange);
+  cursor: pointer;
+}
+
+.media-speed-badge {
+  min-width: 42px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 122, 0, 0.45);
+  background: rgba(255, 122, 0, 0.16);
+  color: var(--color-brand-amber);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.media-speed-badge:hover {
+  background: var(--color-brand-orange);
+  border-color: var(--color-brand-orange);
+  color: #ffffff;
 }
 
 .monitor-status-pill {

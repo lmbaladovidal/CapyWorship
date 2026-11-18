@@ -6,6 +6,17 @@ For detailed release notes in Spanish, please see [NOTAS_DE_VERSION.md](./NOTAS_
 
 ---
 
+## [2.2.1] - 2026-11-18
+
+### Added
+- **Startup Splash Banner (`electron/splash.html`):** Frameless startup banner following `design_system_multimedios.md` with **CapyWorship — Tech for the Kingdom** branding, `branding/icon.png` isotipo, progress bar, and typewriter loading status driven by main and renderer IPC (`splash-status`, `app-ready`).
+- **Media Playback Speed Control (`0.25x` – `2x`):** Replaced `#btn-quick-prev` and `#btn-quick-next` in `.monitor-transport-row` with `#input-media-speed` and `#btn-media-speed-reset` (default `1x`), persisted via `mediaPlaybackRate` in `Store` and synchronized with `audience.html`.
+
+### Fixed
+- **Short Video Thumbnail Generation:** Added `seekable`/duration checks and a `1200ms` `onseeked` fallback in `MediaCache.generateThumbnail` so lightweight/short MP4 clips capture their first decoded frame instead of timing out.
+
+---
+
 ## [2.2.0] - 2026-11-16
 
 ### Added

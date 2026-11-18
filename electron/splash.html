@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CapyWorship — Iniciando</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Montserrat:wght@700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --color-brand-navy: #1A2B4C;
+      --color-brand-navy-dark: #121E36;
+      --color-brand-orange: #FF7A00;
+      --color-brand-orange-hover: #E06900;
+      --color-brand-amber: #FFAE42;
+      --color-text-white: #FFFFFF;
+      --color-text-light: #D8E0E8;
+      --font-sans: 'Plus Jakarta Sans', 'Montserrat', 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: var(--font-sans);
+      color: var(--color-text-white);
+    }
+
+    .splash-wrapper {
+      width: 100%;
+      height: 100%;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .splash-banner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(145deg, var(--color-brand-navy) 0%, var(--color-brand-navy-dark) 100%);
+      border-radius: 16px;
+      border: 1.5px solid rgba(255, 174, 66, 0.28);
+      box-shadow:
+        0 18px 40px rgba(10, 18, 34, 0.68),
+        0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      opacity: 0;
+      transform: scale(0.96) translateY(6px);
+      animation: bannerIn 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      transition: opacity 320ms ease, transform 320ms ease;
+    }
+
+    .splash-banner.fade-out {
+      opacity: 0;
+      transform: scale(1.02);
+    }
+
+    @keyframes bannerIn {
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* Top Brand Accent Strip */
+    .top-accent {
+      height: 4px;
+      width: 100%;
+      background: linear-gradient(90deg, var(--color-brand-orange) 0%, var(--color-brand-amber) 60%, var(--color-brand-orange) 100%);
+      flex-shrink: 0;
+    }
+
+    /* Subtle decorative background glow & equalizer */
+    .bg-glow {
+      position: absolute;
+      top: -60px;
+      right: -50px;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 122, 0, 0.16) 0%, rgba(255, 122, 0, 0) 70%);
+      pointer-events: none;
+    }
+
+    .bg-equalizer {
+      position: absolute;
+      right: 26px;
+      top: 32px;
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 36px;
+      pointer-events: none;
+    }
+
+    .bg-equalizer span {
+      display: block;
+      width: 4px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.15);
+      animation: eqBounce 1.25s ease-in-out infinite;
+    }
+
+    .bg-equalizer span:nth-child(1) { height: 14px; animation-delay: 0.0s; }
+    .bg-equalizer span:nth-child(2) { height: 28px; animation-delay: 0.18s; background: rgba(255, 174, 66, 0.35); }
+    .bg-equalizer span:nth-child(3) { height: 36px; animation-delay: 0.35s; background: rgba(255, 122, 0, 0.45); }
+    .bg-equalizer span:nth-child(4) { height: 24px; animation-delay: 0.52s; background: rgba(255, 174, 66, 0.35); }
+    .bg-equalizer span:nth-child(5) { height: 16px; animation-delay: 0.7s; }
+
+    @keyframes eqBounce {
+      0%, 100% { transform: scaleY(0.45); opacity: 0.65; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+
+    /* Header window dots (MULTIMEDIOS window motif) */
+    .banner-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px 0 24px;
+      z-index: 1;
+    }
+
+    .window-dots {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .window-dots span {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+    }
+
+    .dot-orange { background: var(--color-brand-orange); }
+    .dot-amber { background: var(--color-brand-amber); }
+    .dot-white { background: var(--color-text-white); opacity: 0.85; }
+
+    .brand-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      background: rgba(18, 30, 54, 0.75);
+      border: 1px solid rgba(255, 174, 66, 0.35);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-brand-amber);
+    }
+
+    /* Main Brand Identity */
+    .banner-body {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      padding: 12px 28px;
+      z-index: 1;
+    }
+
+    .isotipo-frame {
+      position: relative;
+      width: 108px;
+      height: 108px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .isotipo-ring {
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      background: conic-gradient(
+        from 0deg,
+        var(--color-brand-orange) 0deg,
+        var(--color-brand-amber) 120deg,
+        rgba(255, 255, 255, 0.12) 220deg,
+        var(--color-brand-orange) 360deg
+      );
+      animation: spinRing 3.6s linear infinite;
+      opacity: 0.9;
+    }
+
+    @keyframes spinRing {
+      to { transform: rotate(360deg); }
+    }
+
+    .isotipo-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: var(--color-brand-navy-dark);
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .isotipo-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .brand-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .brand-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-brand-amber);
+    }
+
+    .brand-title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .brand-wordmark {
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      color: var(--color-text-white);
+    }
+
+    .brand-wordmark span {
+      color: var(--color-brand-orange);
+    }
+
+    .brand-version {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(255, 122, 0, 0.18);
+      border: 1px solid rgba(255, 122, 0, 0.45);
+      color: var(--color-brand-amber);
+      letter-spacing: 0.04em;
+    }
+
+    .brand-slogan {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-text-light);
+      letter-spacing: 0.02em;
+    }
+
+    .brand-sub-slogan {
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(216, 224, 232, 0.78);
+      letter-spacing: 0.03em;
+    }
+
+    /* Footer: Typewriter Status + Progress Bar */
+    .banner-footer {
+      padding: 14px 24px 18px 24px;
+      background: rgba(18, 30, 54, 0.65);
+      border-top: 1px solid rgba(216, 224, 232, 0.12);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 1;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 20px;
+    }
+
+    .status-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .status-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-brand-orange);
+      box-shadow: 0 0 8px var(--color-brand-orange);
+      flex-shrink: 0;
+      animation: pulseDot 1.2s ease-in-out infinite;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { transform: scale(0.85); opacity: 0.7; }
+      50% { transform: scale(1.15); opacity: 1; }
+    }
+
+    .status-text {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--color-text-white);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .typing-cursor {
+      display: inline-block;
+      width: 7px;
+      height: 13px;
+      background: var(--color-brand-amber);
+      margin-left: 3px;
+      vertical-align: -2px;
+      animation: blinkCursor 0.75s step-end infinite;
+    }
+
+    @keyframes blinkCursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .status-percent {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-brand-amber);
+      flex-shrink: 0;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 6%;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, var(--color-brand-orange) 0%, var(--color-brand-amber) 100%);
+      box-shadow: 0 0 10px rgba(255, 122, 0, 0.55);
+      transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+  </style>
+</head>
+<body>
+  <div class="splash-wrapper">
+    <div class="splash-banner" id="splash-banner">
+      <div class="top-accent"></div>
+      <div class="bg-glow"></div>
+
+      <div class="bg-equalizer" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+
+      <header class="banner-header">
+        <div class="window-dots" aria-hidden="true">
+          <span class="dot-orange"></span>
+          <span class="dot-amber"></span>
+          <span class="dot-white"></span>
+        </div>
+        <div class="brand-pill">MULTIMEDIOS • STUDIO</div>
+      </header>
+
+      <main class="banner-body">
+        <div class="isotipo-frame">
+          <div class="isotipo-ring"></div>
+          <div class="isotipo-inner">
+            <img src="../branding/icon.png" alt="CapyWorship" class="isotipo-img" />
+          </div>
+        </div>
+
+        <div class="brand-info">
+          <span class="brand-eyebrow">MULTIMEDIOS PRESENTA</span>
+          <div class="brand-title-row">
+            <h1 class="brand-wordmark">Capy<span>Worship</span></h1>
+            <span class="brand-version" id="splash-version">v2.2.0</span>
+          </div>
+          <p class="brand-slogan">Tech for the Kingdom</p>
+          <p class="brand-sub-slogan">Creatividad en Sintonía • Conectando Historias</p>
+        </div>
+      </main>
+
+      <footer class="banner-footer">
+        <div class="status-row">
+          <div class="status-left">
+            <span class="status-pulse"></span>
+            <span class="status-text"><span id="typed-status"></span><span class="typing-cursor" aria-hidden="true"></span></span>
+          </div>
+          <span class="status-percent" id="status-percent">6%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const version = params.get('v');
+    if (version) {
+      const versionEl = document.getElementById('splash-version');
+      if (versionEl) versionEl.textContent = `v${version}`;
+    }
+
+    const typedEl = document.getElementById('typed-status');
+    const percentEl = document.getElementById('status-percent');
+    const progressFillEl = document.getElementById('progress-fill');
+    const bannerEl = document.getElementById('splash-banner');
+
+    let messageQueue = [];
+    let isTyping = false;
+    let currentTargetText = '';
+    let typingTimer = null;
+
+    function typeNextMessage() {
+      if (messageQueue.length === 0) {
+        isTyping = false;
+        return;
+      }
+
+      isTyping = true;
+      const next = messageQueue.shift();
+      currentTargetText = next.message;
+
+      if (typeof next.progress === 'number') {
+        const clamped = Math.max(0, Math.min(100, Math.round(next.progress)));
+        progressFillEl.style.width = `${clamped}%`;
+        percentEl.textContent = `${clamped}%`;
+      }
+
+      let charIndex = 0;
+      typedEl.textContent = '';
+
+      clearInterval(typingTimer);
+      // Fast, smooth typewriter speed (~18ms per char, faster if more messages are queued)
+      const stepMs = messageQueue.length > 0 ? 10 : 18;
+
+      typingTimer = setInterval(() => {
+        charIndex++;
+        typedEl.textContent = currentTargetText.slice(0, charIndex);
+
+        if (charIndex >= currentTargetText.length) {
+          clearInterval(typingTimer);
+          setTimeout(typeNextMessage, messageQueue.length > 0 ? 120 : 220);
+        }
+      }, stepMs);
+    }
+
+    function enqueueStatus(message, progress) {
+      if (!message) return;
+      // Avoid duplicate consecutive messages
+      const lastQueued = messageQueue[messageQueue.length - 1];
+      if ((lastQueued && lastQueued.message === message) || (!lastQueued && currentTargetText === message)) {
+        if (typeof progress === 'number') {
+          const clamped = Math.max(0, Math.min(100, Math.round(progress)));
+          progressFillEl.style.width = `${clamped}%`;
+          percentEl.textContent = `${clamped}%`;
+        }
+        return;
+      }
+
+      messageQueue.push({ message, progress });
+      if (!isTyping) {
+        typeNextMessage();
+      }
+    }
+
+    // Initial startup message immediately on render
+    enqueueStatus('Iniciando núcleo de CapyWorship...', 10);
+
+    if (window.electronAPI) {
+      if (typeof window.electronAPI.onSplashStatus === 'function') {
+        window.electronAPI.onSplashStatus((payload) => {
+          if (payload && payload.message) {
+            enqueueStatus(payload.message, payload.progress);
+          }
+        });
+      }
+
+      if (typeof window.electronAPI.onSplashFadeOut === 'function') {
+        window.electronAPI.onSplashFadeOut(() => {
+          bannerEl.classList.add('fade-out');
+        });
+      }
+    }
+  </script>
+</body>
+</html>

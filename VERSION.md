@@ -4,9 +4,15 @@ Este archivo registra el control de versiones, cambios granulares, mejoras y cor
 
 ---
 
-## 📌 Versión Actual: `v2.2.0` (Build 20261116.2)
+## 📌 Versión Actual: `v2.2.1` (Build 20261118.1)
 
 ### 🗓️ Registro de Cambios (Changelog Histórico)
+
+### [2.2.1] - 2026-11-18
+#### ✨ Banner de Inicio, Velocidad de Medios y Corrección de Miniaturas
+- **Banner de Inicio (Splash Screen) CapyWorship:** Ventana de arranque sin bordes (`electron/splash.html`) con identidad *MULTIMEDIOS / CapyWorship — Tech for the Kingdom*, progreso en tiempo real y texto animado tipo máquina de escribir hasta que la app completa su hidratación inicial.
+- **Control de Velocidad de Reproducción:** Se sustituyeron `#btn-quick-prev` y `#btn-quick-next` en `.monitor-transport-row` por `#input-media-speed` (`0.25x` a `2x`, `1x` por defecto) y `#btn-media-speed-reset`, sincronizados con `audience.html` y persistidos en `localStorage`.
+- **Miniaturas en Videos Cortos:** Fallback automático al primer frame en `MediaCache.generateThumbnail` cuando un clip corto no tiene rangos `seekable` o no dispara `onseeked` en `1.2s`.
 
 ### [2.2.0] - 2026-11-16
 #### ✨ Rebranding CapyWorship (MULTIMEDIOS) y Catálogo de Biblias Online

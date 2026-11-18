@@ -4,6 +4,17 @@ Todas las novedades, mejoras y correcciones de errores importantes de **ProPrese
 
 ---
 
+## 🚀 Versión 2.2.1 (Banner de Inicio, Control de Velocidad y Miniaturas) — *18 de Noviembre, 2026*
+
+### ✨ Novedades y Mejoras
+- **🎬 Banner de Inicio (Splash Screen) CapyWorship:** Al iniciar el sistema se muestra un banner flotante siguiendo el manual de marca *MULTIMEDIOS* con el isotipo, el nombre **CapyWorship**, el slogan *"Tech for the Kingdom"* y un texto con efecto máquina de escribir que indica paso a paso lo que se está cargando antes de abrir la ventana principal.
+- **⏩ Control de Velocidad de Reproducción (`0.25x` – `2x`):** Se reemplazaron los botones *Anterior* y *Siguiente* de la barra de monitoreo por un deslizador de velocidad para el medio en vivo (`1x` por defecto, con clic en el indicador para restablecer) sincronizado en tiempo real con la salida de Audiencia.
+
+### 🐛 Correcciones
+- **🖼️ Miniaturas en Videos Cortos / Livianos:** Se optimizó la generación de miniaturas en `MediaCache` para capturar automáticamente el primer frame disponible cuando un video corto no dispara `onseeked` o carece de tabla de búsqueda.
+
+---
+
 ## 🚀 Versión 2.2.0 (CapyWorship — Identidad MULTIMEDIOS y Catálogo de Biblias) — *16 de Noviembre, 2026*
 
 ### ✨ Novedades

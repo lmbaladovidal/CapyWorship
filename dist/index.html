@@ -3,29 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ProPresenter AI Studio - Production Control</title>
-  <script type="module" crossorigin src="./assets/main-DlUAS12p.js"></script>
+  <title>CapyWorship — Tech for the Kingdom</title>
+  <link rel="icon" type="image/png" href="./icon.png" />
+  <script type="module" crossorigin src="./assets/main-BYqhjT5i.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/broadcast-BTPDFxxy.js">
-  <link rel="stylesheet" crossorigin href="./assets/main-H16c6KOw.css">
+  <link rel="stylesheet" crossorigin href="./assets/main-DbcBcdGR.css">
 </head>
 <body>
   <div id="app">
     <!-- Top Header Bar (Estilo FreeShow / ProPresenter) -->
     <header class="top-header">
-      <!-- Left Section: App Menu & Brand -->
+      <!-- Left Section: Brand -->
       <div class="header-left">
-        <div class="app-menu-bar">
-          <span class="menu-item">File</span>
-          <span class="menu-item">Edit</span>
-          <span class="menu-item">View</span>
-          <span class="menu-item">Help</span>
-        </div>
         <div class="brand">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-pink)" stroke-width="2.5">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-          <span class="brand-name">FreePresenter <span style="color: var(--accent-pink)">AI</span></span>
-          <span class="brand-badge" id="app-brand-badge">PRO v2.0.0</span>
+          <img src="./icon.png" alt="CapyWorship" class="brand-isotipo" />
+          <div class="brand-text-group">
+            <div class="brand-title-row">
+              <span class="brand-name">CapyWorship</span>
+              <span class="brand-badge" id="app-brand-badge">STUDIO</span>
+            </div>
+            <span class="brand-tagline">MULTIMEDIOS • Tech for the Kingdom</span>
+          </div>
+          <div class="header-equalizer" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
         </div>
       </div>
 
@@ -163,20 +164,29 @@
             </button>
           </div>
           
-          <div class="monitor-screen" style="position: relative; overflow: hidden; aspect-ratio: 16/9; background: #000;">
-            <video id="operator-video-preview-a" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 0; pointer-events: none;"></video>
-            <video id="operator-video-preview-b" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 0; pointer-events: none;"></video>
-            <img id="operator-img-preview-a" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
-            <img id="operator-img-preview-b" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
-            <img id="operator-slide-img-preview" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; opacity: 0; z-index: 1; pointer-events: none; display: none;" />
-            <div id="operator-live-text-wrapper" style="position: absolute; left: 5%; right: 5%; top: 50%; transform: translateY(-50%); text-align: center; pointer-events: none; z-index: 2;">
-              <div id="operator-live-text" class="monitor-live-text" style="color: white; line-height: 1.25;"></div>
+          <div class="monitor-screen-row">
+            <div class="monitor-screen" style="position: relative; overflow: hidden; aspect-ratio: 16/9; background: #000;">
+              <video id="operator-video-preview-a" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none;"></video>
+              <video id="operator-video-preview-b" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none;"></video>
+              <img id="operator-img-preview-a" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
+              <img id="operator-img-preview-b" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
+              <img id="operator-slide-img-preview" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; opacity: 0; z-index: 1; pointer-events: none; display: none;" />
+              <div id="operator-live-text-wrapper" style="position: absolute; left: 5%; right: 5%; top: 50%; transform: translateY(-50%); text-align: center; pointer-events: none; z-index: 2;">
+                <div id="operator-live-text" class="monitor-live-text" style="color: white; line-height: 1.25;"></div>
+              </div>
+
+              <!-- Lower Third Overlay Banner en Monitor del Operador (Fiel a la pantalla de Audiencia) -->
+              <div id="operator-lower-third-banner" style="position: absolute; bottom: 8px; left: 12px; z-index: 3; background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)); border-left: 4px solid #3b82f6; border-radius: 0 6px 6px 0; padding: 6px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.8); pointer-events: none; transition: all 0.3s ease; transform: translateX(-120%); opacity: 0; max-width: 85%;">
+                <div id="operator-lower-third-title" style="font-size: 0.78rem; font-weight: 800; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</div>
+                <div id="operator-lower-third-subtitle" style="font-size: 0.62rem; font-weight: 600; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</div>
+              </div>
             </div>
 
-            <!-- Lower Third Overlay Banner en Monitor del Operador (Fiel a la pantalla de Audiencia) -->
-            <div id="operator-lower-third-banner" style="position: absolute; bottom: 8px; left: 12px; z-index: 3; background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)); border-left: 4px solid #3b82f6; border-radius: 0 6px 6px 0; padding: 6px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.8); pointer-events: none; transition: all 0.3s ease; transform: translateX(-120%); opacity: 0; max-width: 85%;">
-              <div id="operator-lower-third-title" style="font-size: 0.78rem; font-weight: 800; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</div>
-              <div id="operator-lower-third-subtitle" style="font-size: 0.62rem; font-weight: 600; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">--</div>
+            <!-- Vúmetro fijo de audio a la derecha del monitor -->
+            <div id="monitor-vu-meter" class="monitor-vu-meter" title="Indicador de audio del video">
+              <div class="monitor-vu-track">
+                <div id="monitor-vu-fill" class="monitor-vu-fill"></div>
+              </div>
             </div>
           </div>
 
@@ -208,8 +218,11 @@
           </div>
 
           <div class="monitor-transport-row">
-            <button id="btn-quick-prev" class="btn-output monitor-transport-btn" title="Diapositiva Anterior"><i data-lucide="chevron-left"></i> <span>Anterior</span></button>
-            <button id="btn-quick-next" class="btn-output monitor-transport-btn" title="Siguiente Diapositiva"><span>Siguiente</span> <i data-lucide="chevron-right"></i></button>
+            <div class="media-speed-control" title="Velocidad de reproducción del medio (0.25x a 2x)">
+              <span class="media-speed-label"><i data-lucide="gauge" style="width: 13px; height: 13px;"></i></span>
+              <input type="range" id="input-media-speed" class="media-speed-slider" min="0.25" max="2" step="0.05" value="1" title="Ajustar velocidad de reproducción (0.25x - 2x)">
+              <button type="button" id="btn-media-speed-reset" class="media-speed-badge" title="Clic para restablecer a 1x">1x</button>
+            </div>
             <div class="monitor-status-pill" title="Estado de la Señal de Salida">
               <span class="monitor-status-dot"></span>
               <span>EN VIVO</span>
@@ -373,6 +386,10 @@
               <span class="folders-header">Plantillas de Texto</span>
               <button id="btn-create-template" class="btn-add-folder" title="Crear Nueva Plantilla"><i data-lucide="plus"></i></button>
             </div>
+            <div class="tpl-scope-switcher" style="display: flex; gap: 4px; padding: 0 8px 8px 8px;">
+              <button type="button" id="btn-tpl-scope-songs" class="btn-tpl-scope active" data-tpl-scope="songs" style="flex: 1; padding: 5px 6px; font-size: 0.72rem; font-weight: 600; border-radius: 6px; border: 1px solid rgba(236, 72, 153, 0.5); background: rgba(236, 72, 153, 0.16); color: #fff; cursor: pointer;">Canciones</button>
+              <button type="button" id="btn-tpl-scope-scripture" class="btn-tpl-scope" data-tpl-scope="scripture" style="flex: 1; padding: 5px 6px; font-size: 0.72rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer;">Versículos</button>
+            </div>
             <div id="template-list-sidebar" class="folder-list">
               <!-- Dynamically populated templates -->
             </div>
@@ -504,7 +521,7 @@
                   <span>VISTA PREVIA EN VIVO (PLANTILLA ACTIVA)</span>
                 </div>
                 <div class="template-live-preview-box">
-                  <video id="tpl-preview-bg-video" autoplay loop muted playsinline style="position: absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity: 0.8;"></video>
+                  <video id="tpl-preview-bg-video" autoplay loop muted playsinline style="position: absolute; inset:0; width:100%; height:100%; object-fit:contain; opacity: 0.8;"></video>
                   <div id="template-preview-text-wrapper" style="position: absolute; left: 5%; right: 5%; top: 50%; transform: translateY(-50%); text-align: center;">
                     <div id="template-preview-text" class="template-preview-text-sample">
                       Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito...
@@ -705,6 +722,14 @@
           <!-- Configuración de Escrituras -->
           <div class="scripture-dock-settings">
             <div class="scripture-settings-title"><i data-lucide="settings" style="width: 13px; height: 13px; margin-right: 4px;"></i> Ajustes de Escrituras</div>
+
+            <div class="scripture-setting-group">
+              <label>Template de Versículo:</label>
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <select id="select-scripture-template" style="flex: 1;"></select>
+                <button type="button" id="btn-edit-scripture-templates" title="Personalizar Templates de Versículos" style="background: rgba(56, 189, 248, 0.16); border: 1px solid rgba(56, 189, 248, 0.4); color: var(--accent-cyan); border-radius: 4px; height: 24px; padding: 0 7px; font-size: 0.68rem; font-weight: 600; cursor: pointer; white-space: nowrap;">Editar</button>
+              </div>
+            </div>
             
             <div class="scripture-setting-group">
               <label>Máx Renglones por filmina:</label>
@@ -1385,36 +1410,51 @@
       </div>
     </div>
 
-    <!-- Modal para Cargar Biblia desde URL o Archivo JSON -->
+    <!-- Modal para Cargar Biblia desde Catálogo Online, URL o Archivo JSON -->
     <div id="modal-load-bible" class="modal-overlay">
-      <div class="modal-card">
+      <div class="modal-card" style="max-width: 620px;">
         <div class="modal-header">
-          <h3><i data-lucide="book-open" class="icon-blue" style="width: 18px; height: 18px; margin-right: 6px;"></i> Cargar Nueva Biblia (URL / JSON)</h3>
+          <h3><i data-lucide="book-open" class="icon-blue" style="width: 18px; height: 18px; margin-right: 6px;"></i> Instalar Biblias Disponibles</h3>
           <button id="btn-close-load-bible-modal" class="modal-close-btn">&times;</button>
         </div>
-        <div class="modal-body">
-          <label>Ingresa el enlace URL de la Biblia en formato JSON:</label>
-          <input type="text" id="input-bible-url" placeholder="https://mrk214.github.io/snapshots/es___spa___spa/DHH94I_vid_52.json" value="https://mrk214.github.io/snapshots/es___spa___spa/DHH94I_vid_52.json" />
-          
-          <div style="margin: 14px 0 8px 0; text-align: center; font-size: 0.72rem; color: var(--text-muted); position: relative;">
-            <span style="background: var(--bg-card); padding: 0 8px; position: relative; z-index: 1;">O SELECCIONAR ARCHIVO LOCAL (.JSON)</span>
+        <div class="modal-body" style="max-height: 74vh; overflow-y: auto;">
+          <!-- Catálogo de Biblias No Instaladas -->
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+            <div id="bible-catalog-lang-filters" style="display: flex; gap: 4px; flex-wrap: wrap;">
+              <button type="button" class="btn-bible-lang-filter active" data-lang="ALL" style="padding: 4px 10px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600; border: 1px solid var(--color-brand-orange); background: var(--color-brand-orange); color: #FFFFFF; cursor: pointer;">Todas</button>
+              <button type="button" class="btn-bible-lang-filter" data-lang="ES" style="padding: 4px 10px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600; border: 1px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer;">Español</button>
+              <button type="button" class="btn-bible-lang-filter" data-lang="EN" style="padding: 4px 10px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600; border: 1px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer;">English</button>
+              <button type="button" class="btn-bible-lang-filter" data-lang="PT" style="padding: 4px 10px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600; border: 1px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer;">Português</button>
+            </div>
+            <input type="text" id="input-bible-catalog-search" placeholder="Buscar versión (ej: RVR, NVI, KJV)..." style="flex: 1; min-width: 180px; height: 34px; font-size: 0.78rem;" />
+          </div>
+
+          <div id="bible-catalog-list" style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--color-brand-navy-dark); padding: 6px; display: flex; flex-direction: column; gap: 6px;">
+            <div style="padding: 16px; text-align: center; font-size: 0.76rem; color: var(--text-muted);">Cargando catálogo de biblias disponibles...</div>
+          </div>
+
+          <div style="margin: 14px 0 8px 0; text-align: center; font-size: 0.7rem; color: var(--text-muted); position: relative;">
+            <span style="background: var(--color-brand-navy); padding: 0 8px; position: relative; z-index: 1;">O CARGAR DESDE URL PERSONALIZADA / ARCHIVO (.JSON)</span>
             <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border-color); z-index: 0;"></div>
           </div>
 
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button id="btn-select-bible-file" class="btn-modal-save" style="background: var(--bg-card); border: 1px solid var(--border-color); color: #fff; font-size: 0.75rem;">
+          <label style="font-size: 0.76rem;">URL de la Biblia en formato JSON (opcional):</label>
+          <input type="text" id="input-bible-url" placeholder="https://mrk214.github.io/snapshots/es___spa___spa/RVR1960_vid_149.json" value="" />
+
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px;">
+            <button id="btn-select-bible-file" class="btn-modal-save" style="background: var(--bg-card) !important; border: 1px solid var(--border-color) !important; color: #fff; font-size: 0.75rem;">
               <i data-lucide="folder"></i> Elegir archivo JSON...
             </button>
             <span id="label-selected-bible-file" style="font-size: 0.72rem; color: var(--text-muted);">Ningún archivo seleccionado</span>
             <input type="file" id="input-bible-file" accept=".json" style="display: none;" />
           </div>
-          
-          <div id="bible-load-status" style="margin-top: 12px; font-size: 0.76rem; font-weight: 700; color: var(--accent-cyan); display: none;"></div>
+
+          <div id="bible-load-status" style="margin-top: 12px; font-size: 0.76rem; font-weight: 700; color: var(--color-brand-amber); display: none;"></div>
         </div>
         <div class="modal-footer">
-          <button id="btn-cancel-load-bible" class="btn-modal-cancel">Cancelar</button>
-          <button id="btn-submit-load-bible" class="btn-modal-save" style="background: linear-gradient(135deg, var(--accent-magenta), #c026d3);">
-            <i data-lucide="zap"></i> Cargar Biblia
+          <button id="btn-cancel-load-bible" class="btn-modal-cancel">Cerrar</button>
+          <button id="btn-submit-load-bible" class="btn-modal-save">
+            <i data-lucide="zap"></i> Cargar URL / Archivo
           </button>
         </div>
       </div>

@@ -61,6 +61,7 @@ class ProPresenterApp {
     }
 
     window.closeAllModals = () => this.closeAllModals();
+    this.reportSplashStatus('Preparando espacio de trabajo e íconos...', 58);
     this.initDOM();
     this.templateScope = 'songs';
     this.bindEvents();
@@ -69,7 +70,7 @@ class ProPresenterApp {
     this.initKeyboardShortcuts();
     this.bindContextMenuEvents();
     this._mediaThumbHydrationPromise = this.initMediaCacheHydration();
-    this.initPhysicalFoldersSync();
+    this._physicalFoldersSyncPromise = this.initPhysicalFoldersSync();
 
     // Subscribe to state changes and sync displays
     store.subscribe((state, decks) => {
@@ -79,6 +80,7 @@ class ProPresenterApp {
 
     // Initial view render
     store.notify();
+    this.finishStartupSequence();
 
 
     // Start real-time clock for operator stage preview & FreeShow bottom dock
@@ -104,6 +106,30 @@ class ProPresenterApp {
         dockDateEl.textContent = now.toLocaleDateString('en-US', options);
       }
     }, 1000);
+  }
+
+  reportSplashStatus(message, progress) {
+    try {
+      window.electronAPI?.sendSplashStatus?.(message, progress);
+    } catch (_) {}
+  }
+
+  async finishStartupSequence() {
+    try {
+      this.reportSplashStatus('Hidratando caché de miniaturas y medios...', 74);
+      if (this._mediaThumbHydrationPromise) {
+        await this._mediaThumbHydrationPromise.catch(() => {});
+      }
+
+      this.reportSplashStatus('Sincronizando carpetas físicas multimedia...', 88);
+      if (this._physicalFoldersSyncPromise) {
+        await this._physicalFoldersSyncPromise.catch(() => {});
+      }
+
+      this.reportSplashStatus('Conectando pantallas y transmisión en vivo...', 95);
+    } finally {
+      window.electronAPI?.notifyAppReady?.();
+    }
   }
 
   initDOM() {
@@ -353,8 +379,16 @@ class ProPresenterApp {
     // 3. Navigation Controls
     document.getElementById('btn-next-slide')?.addEventListener('click', () => store.nextSlide());
     document.getElementById('btn-prev-slide')?.addEventListener('click', () => store.prevSlide());
-    document.getElementById('btn-quick-next')?.addEventListener('click', () => store.nextSlide());
-    document.getElementById('btn-quick-prev')?.addEventListener('click', () => store.prevSlide());
+
+    const mediaSpeedInput = document.getElementById('input-media-speed');
+    const mediaSpeedResetBtn = document.getElementById('btn-media-speed-reset');
+    mediaSpeedInput?.addEventListener('input', () => {
+      const rate = parseFloat(mediaSpeedInput.value);
+      store.setMediaPlaybackRate(rate);
+    });
+    mediaSpeedResetBtn?.addEventListener('click', () => {
+      store.setMediaPlaybackRate(1.0);
+    });
 
     // 4. Resource Dock Tabs Switching (Sincroniza Contenido y Sub-sidebar Izquierdo)
     document.querySelectorAll('.res-tab').forEach(tab => {
@@ -5680,6 +5714,7 @@ class ProPresenterApp {
     if (bgA && bgB) {
       const shouldOperatorMute = this.isAudienceOpen || !!state.isMediaAudioMuted;
       const operatorVolume = typeof state.mediaAudioVolume === 'number' ? state.mediaAudioVolume : 1.0;
+      const playbackRate = typeof state.mediaPlaybackRate === 'number' ? Math.max(0.25, Math.min(2.0, state.mediaPlaybackRate)) : 1.0;
       const hasQueue = Array.isArray(state.mediaQueue) && state.mediaQueue.length > 0;
       const shouldLoop = !hasQueue;
 
@@ -5687,6 +5722,8 @@ class ProPresenterApp {
       bgB.muted = shouldOperatorMute;
       bgA.volume = operatorVolume;
       bgB.volume = operatorVolume;
+      bgA.playbackRate = playbackRate;
+      bgB.playbackRate = playbackRate;
       bgA.loop = shouldLoop;
       bgB.loop = shouldLoop;
 
@@ -5750,6 +5787,7 @@ class ProPresenterApp {
           incomingMedia.video.loop = shouldLoop;
           incomingMedia.video.muted = shouldOperatorMute;
           incomingMedia.video.volume = operatorVolume;
+          incomingMedia.video.playbackRate = playbackRate;
           incomingMedia.video.style.display = 'block';
           if (incomingMedia.img) incomingMedia.img.style.display = 'none';
         }
@@ -5996,6 +6034,18 @@ class ProPresenterApp {
     }
     if (videoVolBadge) {
       videoVolBadge.textContent = `${audioVol}%`;
+    }
+
+    const playbackRate = typeof state.mediaPlaybackRate === 'number'
+      ? Math.max(0.25, Math.min(2.0, state.mediaPlaybackRate))
+      : 1.0;
+    const mediaSpeedInput = document.getElementById('input-media-speed');
+    const mediaSpeedBadge = document.getElementById('btn-media-speed-reset');
+    if (mediaSpeedInput && document.activeElement !== mediaSpeedInput) {
+      mediaSpeedInput.value = playbackRate;
+    }
+    if (mediaSpeedBadge) {
+      mediaSpeedBadge.textContent = `${Number(playbackRate.toFixed(2))}x`;
     }
     this.updateMonitorVuMeter(state);
 

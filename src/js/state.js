@@ -454,9 +454,13 @@ export class Store {
       mediaTransition: getStorageItem("propresenter_media_trans") || "fade",
       fadeDuration: parseInt(getStorageItem("propresenter_fade_duration") || "250"),
 
-      // Audio Settings for Video Playback
+      // Audio & Playback Settings for Video
       isMediaAudioMuted: getStorageItem("propresenter_media_audio_muted") === "true",
       mediaAudioVolume: getStorageItem("propresenter_media_audio_volume") !== null ? parseFloat(getStorageItem("propresenter_media_audio_volume")) : 1.0,
+      mediaPlaybackRate: (() => {
+        const saved = parseFloat(getStorageItem("propresenter_media_playback_rate"));
+        return Number.isFinite(saved) ? Math.max(0.25, Math.min(2.0, saved)) : 1.0;
+      })(),
       isMediaPaused: false,
       mediaPlaybackCommand: null,
 
@@ -542,6 +546,7 @@ export class Store {
     setStorageItem("propresenter_fade_duration", this.state.fadeDuration);
     setStorageItem("propresenter_media_audio_muted", String(this.state.isMediaAudioMuted));
     setStorageItem("propresenter_media_audio_volume", String(this.state.mediaAudioVolume));
+    setStorageItem("propresenter_media_playback_rate", String(this.state.mediaPlaybackRate));
 
     // Transmit lightweight projection state to Audience and Stage displays via Broadcast & IPC
     sync.sendUpdate(this.getProjectionPayload());
@@ -564,6 +569,16 @@ export class Store {
     const clamped = Math.max(0, Math.min(1, parseFloat(volume) || 0));
     this.state.mediaAudioVolume = clamped;
     setStorageItem("propresenter_media_audio_volume", String(clamped));
+    this.notify();
+  }
+
+  setMediaPlaybackRate(rate) {
+    const parsed = parseFloat(rate);
+    const clamped = Number.isFinite(parsed)
+      ? Math.max(0.25, Math.min(2.0, Math.round(parsed * 100) / 100))
+      : 1.0;
+    this.state.mediaPlaybackRate = clamped;
+    setStorageItem("propresenter_media_playback_rate", String(clamped));
     this.notify();
   }
 

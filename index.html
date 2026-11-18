@@ -217,8 +217,11 @@
           </div>
 
           <div class="monitor-transport-row">
-            <button id="btn-quick-prev" class="btn-output monitor-transport-btn" title="Diapositiva Anterior"><i data-lucide="chevron-left"></i> <span>Anterior</span></button>
-            <button id="btn-quick-next" class="btn-output monitor-transport-btn" title="Siguiente Diapositiva"><span>Siguiente</span> <i data-lucide="chevron-right"></i></button>
+            <div class="media-speed-control" title="Velocidad de reproducción del medio (0.25x a 2x)">
+              <span class="media-speed-label"><i data-lucide="gauge" style="width: 13px; height: 13px;"></i></span>
+              <input type="range" id="input-media-speed" class="media-speed-slider" min="0.25" max="2" step="0.05" value="1" title="Ajustar velocidad de reproducción (0.25x - 2x)">
+              <button type="button" id="btn-media-speed-reset" class="media-speed-badge" title="Clic para restablecer a 1x">1x</button>
+            </div>
             <div class="monitor-status-pill" title="Estado de la Señal de Salida">
               <span class="monitor-status-dot"></span>
               <span>EN VIVO</span>

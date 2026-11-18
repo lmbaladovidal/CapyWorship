@@ -338,14 +338,19 @@
       const mediaMode = state.mediaTransition || 'fade';
       const isAudioMuted = !!state.isMediaAudioMuted;
       const audioVolume = typeof state.mediaAudioVolume === 'number' ? state.mediaAudioVolume : 1.0;
+      const playbackRate = typeof state.mediaPlaybackRate === 'number'
+        ? Math.max(0.25, Math.min(2.0, state.mediaPlaybackRate))
+        : 1.0;
       hasQueuedMedia = Array.isArray(state.mediaQueue) && state.mediaQueue.length > 0;
       const shouldLoop = !hasQueuedMedia;
 
-      // Real-time synchronization of audio mute state, volume, and loop mode on currently active video
+      // Real-time synchronization of audio mute state, volume, playback rate, and loop mode on currently active video
       bgVideoA.muted = isAudioMuted;
       bgVideoB.muted = isAudioMuted;
       bgVideoA.volume = audioVolume;
       bgVideoB.volume = audioVolume;
+      bgVideoA.playbackRate = playbackRate;
+      bgVideoB.playbackRate = playbackRate;
       bgVideoA.loop = shouldLoop;
       bgVideoB.loop = shouldLoop;
 
@@ -417,6 +422,7 @@
           incomingMedia.video.loop = shouldLoop;
           incomingMedia.video.muted = isAudioMuted;
           incomingMedia.video.volume = audioVolume;
+          incomingMedia.video.playbackRate = playbackRate;
           incomingMedia.video.style.display = 'block';
           incomingMedia.img.style.display = 'none';
         }
