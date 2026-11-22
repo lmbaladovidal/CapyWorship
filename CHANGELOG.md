@@ -6,6 +6,16 @@ For detailed release notes in Spanish, please see [NOTAS_DE_VERSION.md](./NOTAS_
 
 ---
 
+## [2.2.2] - 2026-11-22
+
+### Fixed
+- **Per-Video Playback Speed:** Reset `mediaPlaybackRate` to `1.0` in `Store.setActiveVideo` and removed cross-session persistence so speed changes apply only to the currently playing video.
+- **Scripture Range to Show Conversion:** Added `parseScriptureReference` supporting verse ranges (e.g., `genesis 1:10-11`) so `#btn-convert-scripture-to-show` converts only the specified verses instead of the entire chapter.
+- **Automatic Template Assignment:** Cleared stale `deck.style` in `setDeckTemplate`, refreshed live slides in `updateActiveTemplateProperties`, used `activeDeckId || liveDeckId` in `renderTemplatesSidebar`, and auto-applied scripture template selection to the active live verse.
+- **Splash Screen Minimum Display:** Enforced a `2000ms` minimum display duration in `revealMainWindow` even when the main window loads faster.
+
+---
+
 ## [2.2.1] - 2026-11-18
 
 ### Added

@@ -4448,11 +4448,16 @@ class ProPresenterApp {
         const id = item.getAttribute('data-tpl-id');
         if (this.templateScope === 'scripture') {
           store.setActiveScriptureTemplate(id);
+          if (this.activeVerseData && store.state.liveContentType === 'scripture' && !store.state.isTextCleared) {
+            this.projectActiveVerse();
+          }
+          this.renderScripture3ColView();
           this.populateTemplateForm(store.state.activeScriptureTemplate);
         } else {
           store.setActiveTemplate(id);
-          if (store.activeDeckId) {
-            store.setDeckTemplate(store.activeDeckId, id);
+          const targetDeckId = store.activeDeckId || store.state.liveDeckId;
+          if (targetDeckId) {
+            store.setDeckTemplate(targetDeckId, id);
           }
           this.populateTemplateForm(store.state.activeTemplate);
         }
@@ -4867,6 +4872,7 @@ class ProPresenterApp {
       item.addEventListener('click', () => {
         this.selectedBookId = item.getAttribute('data-book-id');
         this.selectedChapter = 1;
+        this.selectedVerseRange = null;
         this.renderScripture3ColView();
       });
     });
@@ -4894,6 +4900,7 @@ class ProPresenterApp {
     chaptersListEl.querySelectorAll('.scripture-chapter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         this.selectedChapter = parseInt(btn.getAttribute('data-chap-num'));
+        this.selectedVerseRange = null;
         this.renderScripture3ColView();
       });
     });
@@ -5262,32 +5269,61 @@ class ProPresenterApp {
     }
   }
 
+  parseScriptureReference(rawQuery = '') {
+    const trimmed = String(rawQuery || '').trim();
+    if (!trimmed) return null;
+
+    // Soporta "Juan 3:16", "genesis 1:10-11", "Salmos 23", "1 Corintios 13:4-7"
+    const refRegex = /^([1-3]?\s*[a-zA-ZñÑáéíóúÁÉÍÓÚ]+)\s*(\d+)?(?::(\d+)(?:\s*[-–]\s*(\d+))?)?$/i;
+    const match = trimmed.match(refRegex);
+    if (!match) return null;
+
+    const rawBookName = match[1].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const matchedBook = BIBLE_BOOKS.find(b => {
+      const bNorm = b.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return bNorm.startsWith(rawBookName) || bNorm.includes(rawBookName);
+    });
+    if (!matchedBook) return null;
+
+    let chapter = null;
+    if (match[2]) {
+      const chapNum = parseInt(match[2], 10);
+      if (chapNum >= 1 && chapNum <= matchedBook.chapters) {
+        chapter = chapNum;
+      }
+    }
+
+    let startVerse = match[3] ? parseInt(match[3], 10) : null;
+    let endVerse = match[4] ? parseInt(match[4], 10) : startVerse;
+    if (startVerse !== null && endVerse !== null && endVerse < startVerse) {
+      [startVerse, endVerse] = [endVerse, startVerse];
+    }
+
+    return {
+      book: matchedBook,
+      chapter,
+      startVerse,
+      endVerse
+    };
+  }
+
   bindScriptureEvents() {
     const searchInput = document.getElementById('input-scripture-search');
 
     searchInput?.addEventListener('input', () => {
       this.scriptureQuery = searchInput.value;
+      const parsed = this.parseScriptureReference(this.scriptureQuery);
 
-      // Smart direct reference parsing (e.g. "Juan 3:16" or "Salmos 23")
-      const refRegex = /^([1-3]?\s*[a-zA-záéíóúÁÉÍÓÚ]+)\s*(\d+)?(?::(\d+))?$/i;
-      const match = this.scriptureQuery.trim().match(refRegex);
-
-      if (match) {
-        const rawBookName = match[1].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const matchedBook = BIBLE_BOOKS.find(b => {
-          const bNorm = b.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          return bNorm.startsWith(rawBookName) || bNorm.includes(rawBookName);
-        });
-
-        if (matchedBook) {
-          this.selectedBookId = matchedBook.id;
-          if (match[2]) {
-            const chap = parseInt(match[2]);
-            if (chap >= 1 && chap <= matchedBook.chapters) {
-              this.selectedChapter = chap;
-            }
-          }
+      if (parsed) {
+        this.selectedBookId = parsed.book.id;
+        if (parsed.chapter !== null) {
+          this.selectedChapter = parsed.chapter;
         }
+        this.selectedVerseRange = parsed.startVerse !== null
+          ? { start: parsed.startVerse, end: parsed.endVerse }
+          : null;
+      } else {
+        this.selectedVerseRange = null;
       }
 
       this.renderScripture3ColView();
@@ -5301,6 +5337,7 @@ class ProPresenterApp {
           searchInput.value = this.matchedBookSuggestion.name;
           this.selectedBookId = this.matchedBookSuggestion.id;
           this.selectedChapter = 1;
+          this.selectedVerseRange = null;
           this.renderScripture3ColView();
         }
       }
@@ -5343,11 +5380,35 @@ class ProPresenterApp {
       this.renderScripture3ColView();
     });
 
-    // Convert current scripture passage to permanent show deck with smart verse splitting & subscript ref
+    // Convert current scripture passage (or typed verse/range like "genesis 1:10-11") to permanent show deck
     document.getElementById('btn-convert-scripture-to-show')?.addEventListener('click', () => {
+      const searchVal = document.getElementById('input-scripture-search')?.value || this.scriptureQuery || '';
+      const parsed = this.parseScriptureReference(searchVal);
+      if (parsed) {
+        this.selectedBookId = parsed.book.id;
+        if (parsed.chapter !== null) this.selectedChapter = parsed.chapter;
+        this.selectedVerseRange = parsed.startVerse !== null
+          ? { start: parsed.startVerse, end: parsed.endVerse }
+          : null;
+      }
+
       const activeBookObj = BIBLE_BOOKS.find(b => b.id === this.selectedBookId) || BIBLE_BOOKS[0];
-      const verses = getChapterVerses(this.selectedBookId, this.selectedChapter, this.selectedBibleVersion);
-      const title = `${activeBookObj.name} ${this.selectedChapter} (${this.selectedBibleVersion})`;
+      const allVerses = getChapterVerses(this.selectedBookId, this.selectedChapter, this.selectedBibleVersion);
+
+      let verses = allVerses;
+      let refLabel = `${activeBookObj.name} ${this.selectedChapter}`;
+      if (this.selectedVerseRange && this.selectedVerseRange.start !== null) {
+        const { start, end } = this.selectedVerseRange;
+        const filtered = allVerses.filter(v => Number(v.number) >= start && Number(v.number) <= end);
+        if (filtered.length > 0) {
+          verses = filtered;
+          refLabel = start === end
+            ? `${activeBookObj.name} ${this.selectedChapter}:${start}`
+            : `${activeBookObj.name} ${this.selectedChapter}:${start}-${end}`;
+        }
+      }
+
+      const title = `${refLabel} (${this.selectedBibleVersion})`;
       const maxLines = store.state.scriptureMaxLines;
       const splitLong = store.state.scriptureSplitLong;
       const showRef = store.state.scriptureShowRef;

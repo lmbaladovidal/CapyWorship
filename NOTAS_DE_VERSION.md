@@ -4,6 +4,16 @@ Todas las novedades, mejoras y correcciones de errores importantes de **ProPrese
 
 ---
 
+## 🚀 Versión 2.2.2 (Rangos Bíblicos a Show, Templates Automáticos y Velocidad por Video) — *22 de Noviembre, 2026*
+
+### ✨ Mejoras y Correcciones
+- **⏩ Velocidad de Video por Medio en Curso:** El ajuste de velocidad (`0.25x` – `2x`) ahora aplica únicamente al video que se está reproduciendo y se restablece automáticamente a `1x` al enviar un video nuevo.
+- **📖 Conversión Exacta de Rangos de Versículos a Show:** Al escribir una cita o rango (ej. `genesis 1:10-11`) y presionar *Convertir a Show*, se crea el show únicamente con los versículos indicados en lugar de todo el capítulo.
+- **🎨 Aplicación Automática de Templates:** Al seleccionar un template de canciones se asigna y refresca de forma inmediata en la canción activa/en vivo (eliminando estilos residuales), y al seleccionar un template de escrituras se aplica automáticamente al versículo proyectado.
+- **🎬 Tiempo Mínimo del Banner de Inicio:** Se garantizó un mínimo de 2 segundos de visualización de la `splashWindow` antes de mostrar la ventana principal.
+
+---
+
 ## 🚀 Versión 2.2.1 (Banner de Inicio, Control de Velocidad y Miniaturas) — *18 de Noviembre, 2026*
 
 ### ✨ Novedades y Mejoras

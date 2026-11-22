@@ -4,9 +4,16 @@ Este archivo registra el control de versiones, cambios granulares, mejoras y cor
 
 ---
 
-## 📌 Versión Actual: `v2.2.1` (Build 20261118.1)
+## 📌 Versión Actual: `v2.2.2` (Build 20261122.1)
 
 ### 🗓️ Registro de Cambios (Changelog Histórico)
+
+### [2.2.2] - 2026-11-22
+#### 🐛 Correcciones y Mejoras de Flujo en Vivo
+- **Velocidad de Video por Clip:** `setActiveVideo` restablece `mediaPlaybackRate` a `1.0` al cambiar de medio (sin persistir velocidad entre videos).
+- **Conversión de Rangos Bíblicos:** `parseScriptureReference` soporta rangos como `genesis 1:10-11` y `#btn-convert-scripture-to-show` filtra únicamente ese rango.
+- **Templates Automáticos:** `setDeckTemplate` limpia `deck.style` residual, `updateActiveTemplateProperties` refresca el show en vivo y la selección en **Templates → Versículos** re-proyecta el versículo activo automáticamente.
+- **Splash Screen:** Espera mínima garantizada de `2000ms` antes de abrir la ventana principal.
 
 ### [2.2.1] - 2026-11-18
 #### ✨ Banner de Inicio, Velocidad de Medios y Corrección de Miniaturas

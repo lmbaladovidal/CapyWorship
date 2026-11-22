@@ -457,10 +457,7 @@ export class Store {
       // Audio & Playback Settings for Video
       isMediaAudioMuted: getStorageItem("propresenter_media_audio_muted") === "true",
       mediaAudioVolume: getStorageItem("propresenter_media_audio_volume") !== null ? parseFloat(getStorageItem("propresenter_media_audio_volume")) : 1.0,
-      mediaPlaybackRate: (() => {
-        const saved = parseFloat(getStorageItem("propresenter_media_playback_rate"));
-        return Number.isFinite(saved) ? Math.max(0.25, Math.min(2.0, saved)) : 1.0;
-      })(),
+      mediaPlaybackRate: 1.0,
       isMediaPaused: false,
       mediaPlaybackCommand: null,
 
@@ -546,7 +543,6 @@ export class Store {
     setStorageItem("propresenter_fade_duration", this.state.fadeDuration);
     setStorageItem("propresenter_media_audio_muted", String(this.state.isMediaAudioMuted));
     setStorageItem("propresenter_media_audio_volume", String(this.state.mediaAudioVolume));
-    setStorageItem("propresenter_media_playback_rate", String(this.state.mediaPlaybackRate));
 
     // Transmit lightweight projection state to Audience and Stage displays via Broadcast & IPC
     sync.sendUpdate(this.getProjectionPayload());
@@ -578,7 +574,6 @@ export class Store {
       ? Math.max(0.25, Math.min(2.0, Math.round(parsed * 100) / 100))
       : 1.0;
     this.state.mediaPlaybackRate = clamped;
-    setStorageItem("propresenter_media_playback_rate", String(clamped));
     this.notify();
   }
 
@@ -704,9 +699,20 @@ export class Store {
     // Si cambió maxLines a un valor > 0, re-dividir filminas excedentes del deck activo
     if (props.maxLines !== undefined && props.maxLines > 0 && props.maxLines !== oldMaxLines && this.activeDeckId) {
       this.reflowDeckSlides(this.activeDeckId, props.maxLines);
-    } else {
-      this.notify();
+      return;
     }
+
+    // Si hay un show proyectándose con esta plantilla, refrescar su estilo efectivo en vivo
+    if (this.state.liveContentType === "slide" && this.state.liveDeckId) {
+      const liveDeck = this.decks.find(d => d.id === this.state.liveDeckId);
+      const targetTplId = props.id || this.activeTemplateId;
+      if (liveDeck && (!liveDeck.templateId || liveDeck.templateId === targetTplId)) {
+        const activeGroup = liveDeck.groups?.[this.state.liveGroupIndex] || liveDeck.groups?.[0];
+        const activeSlide = activeGroup?.slides?.[this.state.liveSlideIndex] || null;
+        this.state.activeTemplate = this.buildEffectiveTemplateForSlide(liveDeck, activeSlide);
+      }
+    }
+    this.notify();
   }
 
   saveTemplate(templateData) {
@@ -1384,8 +1390,8 @@ export class Store {
     if (!deck || !template) return false;
 
     deck.templateId = templateId;
-    // Asignar el estilo base de la plantilla al deck y limpiar estilos locales residuales
-    deck.style = { ...template };
+    // Limpiar overrides locales del deck y sus diapositivas para aplicar la plantilla limpia
+    deck.style = {};
     if (Array.isArray(deck.groups)) {
       deck.groups.forEach(group => {
         (group.slides || []).forEach(slide => {
@@ -1719,6 +1725,7 @@ export class Store {
     this.state.backgroundType = isImage ? "image" : "video";
     this.state.isMediaCleared = false;
     this.state.isMediaPaused = false;
+    this.state.mediaPlaybackRate = 1.0;
     this.state.mediaPlaybackCommand = null;
     this.notify();
   }
