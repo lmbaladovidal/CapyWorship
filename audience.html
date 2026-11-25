@@ -59,6 +59,18 @@
       z-index: 0;
     }
 
+    html.alpha-canvas,
+    body.alpha-canvas {
+      background: transparent !important;
+      background-color: transparent !important;
+    }
+
+    html.alpha-canvas #bg-fallback,
+    body.alpha-canvas #bg-fallback {
+      background: transparent !important;
+      display: none !important;
+    }
+
     #slide-text-container {
       position: absolute;
       left: 5%;
@@ -161,6 +173,17 @@
     import { BroadcastSync } from './src/js/broadcast.js';
 
     const sync = new BroadcastSync(false);
+    const urlParams = new URLSearchParams(window.location.search);
+    const transparentParam = (urlParams.get('transparent') || '').trim().toLowerCase();
+    const modeParam = (urlParams.get('mode') || '').trim().toLowerCase();
+    const isForceTransparentByUrl = transparentParam === 'force';
+    const isMixedAlphaMode = transparentParam === '1' || transparentParam === 'true' || modeParam === 'mixed' || isForceTransparentByUrl;
+
+    if (isMixedAlphaMode) {
+      document.documentElement.classList.add('alpha-canvas');
+      document.body.classList.add('alpha-canvas');
+    }
+
     const bgVideoA = document.getElementById('bg-video-a');
     const bgVideoB = document.getElementById('bg-video-b');
     const bgImgA = document.getElementById('bg-img-a');
@@ -181,6 +204,8 @@
     let fadeTimeout = null;
     let hasQueuedMedia = false;
     let lastMediaCommandId = null;
+    let isBackgroundForceHidden = isForceTransparentByUrl;
+    let mediaOperationToken = 0;
 
     const getActiveAudienceVideo = () => {
       const candidate = activeMediaLayer === 'A' ? bgVideoA : bgVideoB;
@@ -195,6 +220,7 @@
     const executeAudienceMediaCommand = (cmd) => {
       if (!cmd || !cmd.id || cmd.id === lastMediaCommandId) return;
       lastMediaCommandId = cmd.id;
+      if (isBackgroundForceHidden) return;
 
       const activeVid = getActiveAudienceVideo();
       if (!activeVid || activeVid.style.display === 'none') return;
@@ -228,6 +254,8 @@
     bgVideoB.addEventListener('ended', () => handleVideoEnded(bgVideoB));
 
     sync.onUpdate((state) => {
+      isBackgroundForceHidden = isForceTransparentByUrl || Boolean(state.forceTransparentBackground);
+
       // 0. Active Template Typography & Layout Styles
       if (state.activeTemplate) {
         const tpl = state.activeTemplate;
@@ -361,7 +389,14 @@
         return !!url.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i) || url.startsWith('data:image/');
       }
 
-      if (state.isMediaCleared || !state.activeVideoUrl) {
+      const shouldHideBackgroundMedia = isBackgroundForceHidden || state.isMediaCleared || !state.activeVideoUrl;
+
+      if (shouldHideBackgroundMedia) {
+        mediaOperationToken++;
+        if (window.audienceMediaFadeTimeout) {
+          clearTimeout(window.audienceMediaFadeTimeout);
+          window.audienceMediaFadeTimeout = null;
+        }
         if (mediaMode === 'cut') {
           bgVideoA.style.transition = 'none';
           bgVideoB.style.transition = 'none';
@@ -396,6 +431,7 @@
           }, (mediaMode === 'cut' ? 0 : dur) + 60);
         }
       } else if (currentVideoUrl !== state.activeVideoUrl || (state.activeMediaPlayId && currentMediaPlayId !== state.activeMediaPlayId)) {
+        const opToken = ++mediaOperationToken;
         if (window.audienceClearVramTimeout) {
           clearTimeout(window.audienceClearVramTimeout);
           window.audienceClearVramTimeout = null;
@@ -432,6 +468,10 @@
         }
 
         const performCrossfade = () => {
+          if (opToken !== mediaOperationToken || isBackgroundForceHidden) {
+            incomingMedia.video.pause();
+            return;
+          }
           if (mediaMode === 'cut') {
             incomingMedia.video.style.transition = 'none';
             incomingMedia.img.style.transition = 'none';
@@ -468,16 +508,32 @@
           if (playPromise !== undefined) {
             playPromise
               .then(() => {
+                if (opToken !== mediaOperationToken || isBackgroundForceHidden) {
+                  incomingMedia.video.pause();
+                  return;
+                }
                 if (mediaMode !== 'cut') performCrossfade();
               })
               .catch((err) => {
+                if (opToken !== mediaOperationToken || isBackgroundForceHidden) {
+                  incomingMedia.video.pause();
+                  return;
+                }
                 console.warn("[Audience] Autoplay with audio restricted, trying muted first:", err);
                 incomingMedia.video.muted = true;
                 incomingMedia.video.play()
                   .then(() => {
+                    if (opToken !== mediaOperationToken || isBackgroundForceHidden) {
+                      incomingMedia.video.pause();
+                      return;
+                    }
                     if (mediaMode !== 'cut') performCrossfade();
                   })
                   .catch(() => {
+                    if (opToken !== mediaOperationToken || isBackgroundForceHidden) {
+                      incomingMedia.video.pause();
+                      return;
+                    }
                     if (mediaMode !== 'cut') performCrossfade();
                   });
               });

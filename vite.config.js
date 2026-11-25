@@ -9,6 +9,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         audience: resolve(__dirname, 'audience.html'),
         stage: resolve(__dirname, 'stage.html'),
+        videowall: resolve(__dirname, 'videowall.html'),
       },
     },
   },

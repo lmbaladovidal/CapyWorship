@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CapyWorship - Salida Videowall (Solo Videos)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      background: #000000;
+      background-color: #000000;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      cursor: none;
+      user-select: none;
+    }
+
+    .videowall-layer {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    #videowall-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000000;
+      z-index: 1;
+    }
+
+    #videowall-ambient {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: blur(45px) brightness(0.55) saturate(1.2);
+      transform: scale(1.15);
+      z-index: 2;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Capa 1: Video de Fondo / Media -->
+  <video id="videowall-video" class="videowall-layer" autoplay loop muted playsinline></video>
+
+  <!-- Capa 2: Capa Ambiental (Modo Blur para Imágenes / Anuncios / Placas) -->
+  <img id="videowall-ambient" class="videowall-layer" alt="" />
+
+  <script type="module">
+    import { BroadcastSync } from './src/js/broadcast.js';
+
+    const sync = new BroadcastSync(false);
+    const videoEl = document.getElementById('videowall-video');
+    const ambientEl = document.getElementById('videowall-ambient');
+
+    // Siempre silenciado para evitar audio duplicado con audience.html
+    videoEl.muted = true;
+    videoEl.defaultMuted = true;
+
+    let currentVideoUrl = "";
+    let lastVideoSrc = "";
+    let currentAmbientUrl = "";
+    let currentMediaPlayId = 0;
+    let hasQueuedMedia = false;
+    let lastMediaCommandId = null;
+    let pauseVideoTimeout = null;
+
+    function isMediaImage(url, type = "") {
+      if (type && type.startsWith('image/')) return true;
+      if (type && type.startsWith('video/')) return false;
+      if (!url) return false;
+      return !!url.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i) || url.startsWith('data:image/');
+    }
+
+    function cancelPendingVideoPause() {
+      if (pauseVideoTimeout) {
+        clearTimeout(pauseVideoTimeout);
+        pauseVideoTimeout = null;
+      }
+    }
+
+    function scheduleVideoPauseAfterFade() {
+      cancelPendingVideoPause();
+      pauseVideoTimeout = setTimeout(() => {
+        pauseVideoTimeout = null;
+        if (videoEl.style.opacity === '0') {
+          videoEl.pause();
+        }
+      }, 520);
+    }
+
+    function fadeOutToBlackout() {
+      videoEl.style.opacity = '0';
+      ambientEl.style.opacity = '0';
+      scheduleVideoPauseAfterFade();
+    }
+
+    function executeMediaCommand(cmd) {
+      if (!cmd || !cmd.id || cmd.id === lastMediaCommandId) return;
+      lastMediaCommandId = cmd.id;
+
+      if (cmd.action === 'stop') {
+        fadeOutToBlackout();
+        return;
+      }
+
+      if (!currentVideoUrl || videoEl.style.opacity === '0') return;
+
+      if (cmd.action === 'seek' && typeof cmd.time === 'number' && !isNaN(cmd.time)) {
+        try {
+          videoEl.currentTime = Math.max(0, cmd.time);
+        } catch (e) {}
+      } else if (cmd.action === 'restart') {
+        try {
+          videoEl.currentTime = 0;
+          videoEl.muted = true;
+          videoEl.play().catch(() => {});
+        } catch (e) {}
+      } else if (cmd.action === 'pause') {
+        videoEl.pause();
+      } else if (cmd.action === 'play') {
+        videoEl.muted = true;
+        videoEl.play().catch(() => {});
+      }
+    }
+
+    sync.onMediaCommand((cmd) => {
+      executeMediaCommand(cmd);
+    });
+
+    videoEl.addEventListener('ended', () => {
+      if (currentVideoUrl && videoEl.style.opacity === '1' && hasQueuedMedia) {
+        sync.notifyMediaEnded(currentVideoUrl);
+      }
+    });
+
+    sync.onUpdate((state) => {
+      if (!state || typeof state !== 'object') return;
+
+      // Garantizar siempre muted en Videowall
+      videoEl.muted = true;
+
+      const playbackRate = typeof state.mediaPlaybackRate === 'number'
+        ? Math.max(0.25, Math.min(2.0, state.mediaPlaybackRate))
+        : 1.0;
+      hasQueuedMedia = Array.isArray(state.mediaQueue) && state.mediaQueue.length > 0;
+      const shouldLoop = !hasQueuedMedia;
+
+      videoEl.playbackRate = playbackRate;
+      videoEl.loop = shouldLoop;
+
+      const targetUrl = typeof state.activeVideoUrl === 'string' ? state.activeVideoUrl : '';
+      const targetSlideImage = (!state.isTextCleared && typeof state.liveSlideImage === 'string' && state.liveSlideImage)
+        ? state.liveSlideImage
+        : '';
+      const isBlackoutOrCleared = Boolean(state.isMediaCleared) || (!targetUrl && !targetSlideImage);
+
+      // 1. Si hay Blackout activo o Limpiar fondo/todo: prioridad absoluta -> negro puro (#000000)
+      if (isBlackoutOrCleared) {
+        fadeOutToBlackout();
+        return;
+      }
+
+      const isBgImage = Boolean(
+        targetUrl && (
+          state.backgroundType === 'image' ||
+          (state.activeVideoType && state.activeVideoType.startsWith('image/')) ||
+          (state.activeVideoIsImage && !state.activeVideoType?.startsWith('video/')) ||
+          isMediaImage(targetUrl, state.activeVideoType)
+        )
+      );
+
+      const isImageOrPlateActive = isBgImage || Boolean(targetSlideImage);
+      const activeImageUrl = isBgImage ? targetUrl : targetSlideImage;
+
+      // 2. Si el estado tiene un Video activo (y no una imagen/anuncio/placa)
+      if (!isImageOrPlateActive && targetUrl) {
+        cancelPendingVideoPause();
+        ambientEl.style.opacity = '0';
+
+        // Guardar referencia en lastVideoSrc
+        lastVideoSrc = targetUrl;
+
+        const incomingPlayId = state.activeMediaPlayId || 0;
+        const isSameVideo = currentVideoUrl === targetUrl && (!incomingPlayId || currentMediaPlayId === incomingPlayId);
+
+        if (!isSameVideo) {
+          currentVideoUrl = targetUrl;
+          currentMediaPlayId = incomingPlayId;
+
+          videoEl.src = targetUrl;
+          videoEl.currentTime = 0;
+          videoEl.loop = shouldLoop;
+          videoEl.muted = true;
+          videoEl.playbackRate = playbackRate;
+          videoEl.style.opacity = '1';
+
+          if (state.isMediaPaused) {
+            videoEl.pause();
+          } else {
+            const playPromise = videoEl.play();
+            if (playPromise !== undefined) {
+              playPromise.catch(() => {
+                videoEl.muted = true;
+                videoEl.play().catch(() => {});
+              });
+            }
+          }
+        } else {
+          // Mismo video activo: asegurar opacidad 1 y reanudar si estaba pausado por modo anterior
+          videoEl.style.opacity = '1';
+          if (state.isMediaPaused) {
+            if (!videoEl.paused) videoEl.pause();
+          } else if (videoEl.paused) {
+            videoEl.play().catch(() => {});
+          }
+        }
+
+        if (state.mediaPlaybackCommand) {
+          executeMediaCommand(state.mediaPlaybackCommand);
+        }
+        return;
+      }
+
+      // 3. Si el estado tiene una Imagen / Anuncio / Placa activa (y NO es video)
+      const imageMode = ['black', 'sticky', 'blur'].includes(state.videowallImageMode)
+        ? state.videowallImageMode
+        : 'sticky';
+
+      if (imageMode === 'black') {
+        // Modo Negro (Fade out): ocultar ambas capas con transición suave a #000000 y pausar video tras el fade
+        videoEl.style.opacity = '0';
+        ambientEl.style.opacity = '0';
+        scheduleVideoPauseAfterFade();
+      } else if (imageMode === 'sticky') {
+        // Modo Mantener último video: ocultar capa ambiental y mantener lastVideoSrc en loop continuo
+        cancelPendingVideoPause();
+        ambientEl.style.opacity = '0';
+
+        if (lastVideoSrc) {
+          if (currentVideoUrl !== lastVideoSrc) {
+            currentVideoUrl = lastVideoSrc;
+            videoEl.src = lastVideoSrc;
+            videoEl.currentTime = 0;
+          }
+          videoEl.loop = true;
+          videoEl.muted = true;
+          videoEl.style.opacity = '1';
+          if (videoEl.paused && !state.isMediaPaused) {
+            videoEl.play().catch(() => {});
+          }
+        } else {
+          // Si todavía no se reprodujo ningún video en la sesión, quedar en negro puro (#000000)
+          videoEl.style.opacity = '0';
+        }
+      } else if (imageMode === 'blur') {
+        // Modo Color ambiental (Blur): cargar imagen en capa ambiental, mostrarla y ocultar/pausar capa de video
+        if (activeImageUrl && currentAmbientUrl !== activeImageUrl) {
+          currentAmbientUrl = activeImageUrl;
+          ambientEl.src = activeImageUrl;
+        }
+        ambientEl.style.opacity = activeImageUrl ? '1' : '0';
+        videoEl.style.opacity = '0';
+        scheduleVideoPauseAfterFade();
+      }
+    });
+
+    sync.requestState();
+  </script>
+</body>
+
+</html>

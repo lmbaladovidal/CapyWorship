@@ -75,9 +75,33 @@
             </svg>
             <span>Stage</span>
           </button>
+
+          <div class="videowall-output-group" title="Salida nativa para Videowall (Solo Videos)">
+            <select id="select-videowall-display" class="select-videowall-display" title="Seleccionar monitor de salida para Videowall">
+              <option value="">Monitor Auto</option>
+            </select>
+            <div class="videowall-image-mode-wrap" title="Comportamiento del Videowall cuando se proyecta una imagen, placa o anuncio">
+              <label for="select-videowall-image-mode" class="videowall-image-mode-label">En imágenes/anuncios:</label>
+              <select id="select-videowall-image-mode" class="select-videowall-image-mode" title="Comportamiento en imágenes/anuncios">
+                <option value="black">Negro (Fade out)</option>
+                <option value="sticky" selected>Mantener último video</option>
+                <option value="blur">Color ambiental (Blur)</option>
+              </select>
+            </div>
+            <button id="btn-toggle-videowall" class="btn-output btn-videowall-toggle" title="Abrir / Cerrar Videowall (Solo Videos)" aria-pressed="false">
+              <span id="videowall-status-dot" class="videowall-status-dot" aria-hidden="true"></span>
+              <i data-lucide="film"></i>
+              <span id="lbl-toggle-videowall">Abrir Videowall</span>
+            </button>
+          </div>
+
+          <button id="btn-toggle-alpha-bg" class="btn-output btn-alpha-toggle" title="Ocultar fondos de FreePresenter para salida Alpha transparente (OBS / Resolume)" aria-pressed="false">
+            <i data-lucide="layers"></i>
+            <span id="lbl-alpha-bg-toggle">Fondo Alpha</span>
+          </button>
         </div>
 
-        <button id="btn-quick-settings" class="btn-icon" title="Ajustes Rápidos">
+        <button id="btn-quick-settings" class="btn-icon" title="Ajustes de Salida OBS / Resolume">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -164,7 +188,8 @@
           </div>
           
           <div class="monitor-screen-row">
-            <div class="monitor-screen" style="position: relative; overflow: hidden; aspect-ratio: 16/9; background: #000;">
+            <div id="operator-monitor-screen" class="monitor-screen" style="position: relative; overflow: hidden; aspect-ratio: 16/9; background: #000;">
+              <div id="operator-alpha-badge" class="alpha-preview-badge">ALPHA / RESOLUME</div>
               <video id="operator-video-preview-a" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none;"></video>
               <video id="operator-video-preview-b" autoplay loop muted style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none;"></video>
               <img id="operator-img-preview-a" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; z-index: 0; pointer-events: none; display: none;" />
@@ -1854,6 +1879,71 @@
       </div>
       <div class="modal-footer">
         <button type="button" id="btn-cancel-section-picker" class="btn-modal-cancel">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Integración OBS / Spout / Resolume Arena (Modo Mixto) -->
+  <div id="modal-obs-resolume-settings" class="modal-overlay">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="layers" class="icon-cyan" style="width: 18px; height: 18px;"></i>
+          <h3 style="margin: 0; font-size: 0.95rem;">Integración OBS / Spout / Resolume Arena</h3>
+        </div>
+        <button id="btn-close-obs-settings" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <strong style="font-size: 0.8rem; color: #f8fafc;">Browser Source de OBS (Canal Alpha + SSE)</strong>
+            <span id="badge-audience-server-status" class="badge" style="background: rgba(16, 185, 129, 0.16); color: #34d399; font-size: 0.68rem;">Verificando...</span>
+          </div>
+          <label style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Modo Mixto (transparente sin fondo, opaco con fondo/placa):</label>
+          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <input type="text" id="input-obs-mixed-url" readonly value="http://127.0.0.1:3456/audience.html?transparent=1" style="flex: 1; font-family: monospace; font-size: 0.76rem; background: var(--bg-darkest); border: 1px solid var(--border-color); color: #38bdf8; padding: 6px 8px; border-radius: 6px;" />
+            <button type="button" id="btn-copy-obs-url" class="btn-output" style="white-space: nowrap;"><i data-lucide="copy"></i> <span>Copiar</span></button>
+          </div>
+          <label style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Solo texto/overlays siempre transparente (ignora fondos):</label>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" id="input-obs-force-url" readonly value="http://127.0.0.1:3456/audience.html?transparent=force" style="flex: 1; font-family: monospace; font-size: 0.76rem; background: var(--bg-darkest); border: 1px solid var(--border-color); color: #94a3b8; padding: 6px 8px; border-radius: 6px;" />
+            <button type="button" id="btn-copy-obs-force-url" class="btn-output" style="white-space: nowrap;"><i data-lucide="copy"></i> <span>Copiar</span></button>
+          </div>
+        </div>
+
+        <label style="display: flex; align-items: center; gap: 10px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 12px; cursor: pointer; margin: 0;">
+          <input type="checkbox" id="check-modal-alpha-bg" style="width: auto; margin: 0;" />
+          <div>
+            <div style="font-size: 0.82rem; font-weight: 700; color: #f8fafc;">Fondo Alpha (Modo Resolume)</div>
+            <div style="font-size: 0.72rem; color: var(--text-muted);">Oculta los fondos de FreePresenter al instante sin borrar los fondos de tus canciones.</div>
+          </div>
+        </label>
+
+        <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+            <input type="checkbox" id="check-resolume-enabled" style="width: auto; margin: 0;" />
+            <span style="font-size: 0.82rem; font-weight: 700; color: #f8fafc;">Habilitar API REST de Resolume Arena</span>
+          </label>
+          <div style="display: grid; grid-template-columns: 1fr 110px; gap: 8px;">
+            <div>
+              <label style="font-size: 0.72rem; color: var(--text-muted);">Host de Resolume:</label>
+              <input type="text" id="input-resolume-host" value="127.0.0.1" placeholder="127.0.0.1" />
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; color: var(--text-muted);">Puerto REST:</label>
+              <input type="number" id="input-resolume-port" value="8080" min="1" max="65535" />
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 0.72rem; color: var(--text-muted); margin: 0; white-space: nowrap;">Columna de prueba:</label>
+            <input type="number" id="input-resolume-test-col" value="1" min="1" max="999" style="width: 72px;" />
+            <button type="button" id="btn-test-resolume-col" class="btn-output"><i data-lucide="play"></i> <span>Probar Disparo</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btn-cancel-obs-settings" class="btn-modal-cancel">Cerrar</button>
+        <button type="button" id="btn-save-resolume-settings" class="btn-modal-save"><i data-lucide="check"></i> Guardar Ajustes</button>
       </div>
     </div>
   </div>

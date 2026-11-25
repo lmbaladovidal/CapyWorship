@@ -417,6 +417,10 @@ export class Store {
       isTextCleared: false,
       isMediaCleared: false,
       isOverlayCleared: false,
+      forceTransparentBackground: getStorageItem("propresenter_force_transparent_bg") === "true",
+      videowallImageMode: ['black', 'sticky', 'blur'].includes(getStorageItem("freepresenter_videowall_image_mode"))
+        ? getStorageItem("freepresenter_videowall_image_mode")
+        : "sticky",
 
       // Active Template Object
       activeTemplate: this.templates.find(t => t.id === this.activeTemplateId) || this.templates[0],
@@ -543,9 +547,30 @@ export class Store {
     setStorageItem("propresenter_fade_duration", this.state.fadeDuration);
     setStorageItem("propresenter_media_audio_muted", String(this.state.isMediaAudioMuted));
     setStorageItem("propresenter_media_audio_volume", String(this.state.mediaAudioVolume));
+    setStorageItem("propresenter_force_transparent_bg", String(!!this.state.forceTransparentBackground));
+    setStorageItem("freepresenter_videowall_image_mode", this.state.videowallImageMode || "sticky");
 
     // Transmit lightweight projection state to Audience and Stage displays via Broadcast & IPC
     sync.sendUpdate(this.getProjectionPayload());
+  }
+
+  setVideowallImageMode(mode) {
+    const normalized = ['black', 'sticky', 'blur'].includes(mode) ? mode : 'sticky';
+    this.state.videowallImageMode = normalized;
+    setStorageItem("freepresenter_videowall_image_mode", normalized);
+    this.notify();
+    return this.state.videowallImageMode;
+  }
+
+  setForceTransparentBackground(enabled) {
+    this.state.forceTransparentBackground = !!enabled;
+    setStorageItem("propresenter_force_transparent_bg", String(this.state.forceTransparentBackground));
+    this.notify();
+    return this.state.forceTransparentBackground;
+  }
+
+  toggleForceTransparentBackground() {
+    return this.setForceTransparentBackground(!this.state.forceTransparentBackground);
   }
 
   toggleMediaAudio() {

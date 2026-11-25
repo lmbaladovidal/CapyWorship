@@ -6,6 +6,7 @@ const { app, BrowserWindow, ipcMain, dialog, screen, nativeImage } = require('el
 const path = require('path');
 const fs = require('fs');
 const { PresentationImporter, SUPPORTED_EXTENSIONS } = require('./electron/presentation-importer');
+const { LocalAudienceServer, loadAppSettings } = require('./electron/local-audience-server');
 
 let presentationImporter = null;
 function getPresentationImporter() {
@@ -39,6 +40,10 @@ let mainWindow = null;
 let splashWindow = null;
 let audienceWindow = null;
 let stageWindow = null;
+let videowallWindow = null;
+let lastBroadcastState = null;
+let localAudienceServer = null;
+let appSettings = loadAppSettings(__dirname);
 let splashShownAt = 0;
 let isMainRevealed = false;
 let splashFallbackTimer = null;
@@ -185,8 +190,9 @@ function createMainWindow() {
       unwatchPhysicalFolder(folderPath);
     }
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
-    if (audienceWindow) audienceWindow.close();
-    if (stageWindow) stageWindow.close();
+    if (audienceWindow && !audienceWindow.isDestroyed()) audienceWindow.close();
+    if (stageWindow && !stageWindow.isDestroyed()) stageWindow.close();
+    if (videowallWindow && !videowallWindow.isDestroyed()) videowallWindow.close();
   });
 }
 
@@ -283,10 +289,114 @@ function openStageWindow() {
   });
 }
 
+function resolveTargetDisplay(displayId) {
+  const displays = screen.getAllDisplays();
+  const primaryDisplay = screen.getPrimaryDisplay();
+
+  if (displayId !== undefined && displayId !== null && displayId !== '') {
+    const byId = displays.find(d => String(d.id) === String(displayId));
+    if (byId) return byId;
+
+    const parsedIndex = Number(displayId);
+    if (Number.isInteger(parsedIndex) && parsedIndex >= 1 && parsedIndex <= displays.length) {
+      return displays[parsedIndex - 1];
+    }
+  }
+
+  // Fallback: Monitor 3 si existe, sino Monitor secundario, sino Monitor principal
+  const secondaryDisplays = displays.filter(d => d.id !== primaryDisplay.id);
+  return secondaryDisplays[1] || secondaryDisplays[0] || displays[0];
+}
+
+function openVideowallWindow(displayId) {
+  const targetDisplay = resolveTargetDisplay(displayId);
+
+  if (videowallWindow && !videowallWindow.isDestroyed()) {
+    if (targetDisplay && displayId !== undefined && displayId !== null && displayId !== '') {
+      try {
+        videowallWindow.setFullScreen(false);
+        videowallWindow.setBounds({
+          x: targetDisplay.bounds.x,
+          y: targetDisplay.bounds.y,
+          width: targetDisplay.bounds.width,
+          height: targetDisplay.bounds.height
+        });
+        videowallWindow.setFullScreen(true);
+      } catch (e) {}
+    }
+    videowallWindow.focus();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('videowall-status-changed', true);
+    }
+    return true;
+  }
+
+  videowallWindow = new BrowserWindow({
+    x: targetDisplay.bounds.x,
+    y: targetDisplay.bounds.y,
+    width: targetDisplay.bounds.width,
+    height: targetDisplay.bounds.height,
+    fullscreen: true,
+    frame: false,
+    autoHideMenuBar: true,
+    title: "CapyWorship - Salida Videowall (Solo Videos)",
+    backgroundColor: '#000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false
+    }
+  });
+
+  videowallWindow.webContents.on('did-finish-load', () => {
+    if (lastBroadcastState && videowallWindow && !videowallWindow.isDestroyed()) {
+      videowallWindow.webContents.send('broadcast-update', lastBroadcastState);
+    }
+  });
+
+  if (isDev) {
+    videowallWindow.loadURL(`${DEV_URL}/videowall.html`).catch(() => {
+      if (videowallWindow && !videowallWindow.isDestroyed()) {
+        videowallWindow.loadFile(path.join(__dirname, 'dist/videowall.html'));
+      }
+    });
+  } else {
+    videowallWindow.loadFile(path.join(__dirname, 'dist/videowall.html'));
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('videowall-status-changed', true);
+  }
+
+  videowallWindow.on('closed', () => {
+    videowallWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('videowall-status-changed', false);
+    }
+  });
+
+  return true;
+}
+
+function closeVideowallWindow() {
+  if (videowallWindow && !videowallWindow.isDestroyed()) {
+    videowallWindow.close();
+  }
+  videowallWindow = null;
+  return false;
+}
+
 // Electron IPC Events Handling
 ipcMain.on('open-audience-window', () => openAudienceWindow());
 ipcMain.on('open-stage-window', () => openStageWindow());
 ipcMain.handle('is-audience-open', () => !!(audienceWindow && !audienceWindow.isDestroyed()));
+
+ipcMain.on('open-videowall', (_event, displayId) => openVideowallWindow(displayId));
+ipcMain.handle('open-videowall', (_event, displayId) => openVideowallWindow(displayId));
+ipcMain.on('close-videowall', () => closeVideowallWindow());
+ipcMain.handle('close-videowall', () => closeVideowallWindow());
+ipcMain.handle('is-videowall-open', () => !!(videowallWindow && !videowallWindow.isDestroyed()));
 
 ipcMain.on('focus-main-window', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -595,13 +705,23 @@ ipcMain.handle('delete-presentation-assets', async (_event, assetId) => {
 
 // Real-Time High Performance Local IPC Broadcast Synchronization
 ipcMain.on('broadcast-update', (event, state) => {
+  lastBroadcastState = state;
   if (audienceWindow && !audienceWindow.isDestroyed()) {
     audienceWindow.webContents.send('broadcast-update', state);
   }
   if (stageWindow && !stageWindow.isDestroyed()) {
     stageWindow.webContents.send('broadcast-update', state);
   }
+  if (videowallWindow && !videowallWindow.isDestroyed()) {
+    videowallWindow.webContents.send('broadcast-update', state);
+  }
+  if (localAudienceServer) {
+    localAudienceServer.broadcastState(state);
+  }
 });
+
+ipcMain.handle('get-app-settings', () => appSettings);
+ipcMain.handle('get-audience-server-info', () => (localAudienceServer ? localAudienceServer.getInfo() : null));
 
 // Splash Banner Startup IPC
 ipcMain.on('splash-status', (_event, payload) => {
@@ -615,6 +735,30 @@ ipcMain.on('app-ready', () => {
 });
 
 app.whenReady().then(() => {
+  const extraSettingsPaths = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'appsettings.json') : null,
+    path.join(app.getPath('userData'), 'appsettings.json')
+  ].filter(Boolean);
+  appSettings = loadAppSettings(__dirname, extraSettingsPaths);
+
+  const rawPort = appSettings?.AudienceServer?.Port ?? appSettings?.audienceServer?.port ?? appSettings?.httpPort;
+  const parsedPort = Number.parseInt(rawPort, 10);
+  const audienceServerPort = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : 3456;
+  const audienceServerHost = appSettings?.AudienceServer?.Host || '127.0.0.1';
+
+  const distDir = path.join(__dirname, 'dist');
+  const preferDist = !isDev || app.isPackaged || !fs.existsSync(path.join(__dirname, 'audience.html'));
+  const staticRootDir = preferDist && fs.existsSync(distDir) ? distDir : __dirname;
+  const staticFallbackDir = staticRootDir === distDir ? __dirname : (fs.existsSync(distDir) ? distDir : null);
+
+  localAudienceServer = new LocalAudienceServer({
+    host: audienceServerHost,
+    port: audienceServerPort,
+    rootDir: staticRootDir,
+    fallbackRootDir: staticFallbackDir
+  });
+  localAudienceServer.start();
+
   isMainRevealed = false;
   createSplashWindow();
   createMainWindow();
@@ -626,6 +770,12 @@ app.whenReady().then(() => {
       createMainWindow();
     }
   });
+});
+
+app.on('will-quit', () => {
+  if (localAudienceServer) {
+    localAudienceServer.stop();
+  }
 });
 
 app.on('window-all-closed', () => {

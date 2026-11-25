@@ -1,8 +1,37 @@
 # Changelog
 
-All notable changes to **ProPresenter AI Studio** will be documented in this file.
+All notable changes to **CapyWorship** will be documented in this file.
 
 For detailed release notes in Spanish, please see [NOTAS_DE_VERSION.md](./NOTAS_DE_VERSION.md).
+
+---
+
+## [3.0.0] - 2026-11-25
+
+### Added
+- **Native Videowall Output Window (`videowall.html`):** Dedicated full-screen Electron window (`videowallWindow`) and Vite entry point (`dist/videowall.html`) that renders only active background videos (`object-fit: cover; muted; cursor: none; background: #000000`) on an independent display without lyrics, scriptures, plates, or show overlays.
+- **Videowall Display Selector & Live Toggle (`index.html`, `src/js/app.js`, `main.js`, `preload.js`):** Added `#select-videowall-display` (persisted in `localStorage` as `propresenter_videowall_display_id`), `#btn-toggle-videowall` (**Abrir / Cerrar Videowall**) with active status dot, IPC handlers (`open-videowall`, `close-videowall`, `is-videowall-open`, `videowall-status-changed`), and automatic state sync on window launch.
+- **Videowall Image & Announcement Modes (`videowallImageMode`):** Added live selector **"En imágenes/anuncios:"** (`#select-videowall-image-mode`, persisted in `localStorage` as `freepresenter_videowall_image_mode`) with 3 modes in `videowall.html` using dual full-screen layers (`transition: opacity 0.5s ease`):
+  - `black` (**Negro - Fade out**): Smoothly fades out both layers to pure black (`#000000`) and pauses the video after the transition.
+  - `sticky` (**Mantener último video**, default): Keeps the last played background video (`lastVideoSrc`) looping continuously without cuts or restarts while `audience.html` displays the image/announcement.
+  - `blur` (**Color ambiental - Blur**): Displays the active image in a dedicated ambient layer (`#videowall-ambient`) with `filter: blur(45px) brightness(0.55) saturate(1.2); transform: scale(1.15);` while hiding and pausing the video layer to save GPU resources.
+- **Smoke Test Coverage (`tests/smoke-test.mjs`):** Added automated test suites `RF-64` and `RF-65` verifying `videowall.html`, `dist/videowall.html`, IPC handlers, and `videowallImageMode` state management (32/32 tests passing).
+
+### Changed
+- **Repository & Package Identity:** Renamed package and repository to **CapyWorship** (`v3.0.0`).
+
+---
+
+## [2.3.0] - 2026-11-22
+
+### Added
+- **Local HTTP + SSE Audience Server (`electron/local-audience-server.js`):** Native Node.js `http` server on `127.0.0.1:3456` (configurable via `appsettings.json`) serving `audience.html`, static assets, `/events` Server-Sent Events with initial `lastBroadcastState` sync and 25s heartbeats, safe `/local-media/` streaming with `Range` support, and clean shutdown on `will-quit`.
+- **External SSE Fallback (`src/js/broadcast.js`):** Automatic `EventSource('/events')` fallback in `BroadcastSync(false)` when running outside Electron (`!window.electronAPI`).
+- **Mixed Alpha Mode (`audience.html`):** Added `?transparent=1` / `?mode=mixed` and `?transparent=force` support (`alpha-canvas`) for true transparent backgrounds in OBS / Spout / Resolume while rendering active media/slides normally.
+- **Alpha Toggle & Resolume Arena REST Client (`src/js/resolume-client.js`):** Added `forceTransparentBackground` state, **Fondo Alpha** header toggle with checkerboard preview, OBS/Resolume settings modal (`#modal-obs-resolume-settings`), and lightweight `ResolumeClient` (`triggerColumn` with `AbortController`).
+
+### Changed
+- **Packaging & Broadcast Sync:** Included `appsettings.json` in Electron Builder `build.files` and removed duplicate `sync.sendUpdate(state)` emission in `src/js/app.js`.
 
 ---
 

@@ -1,7 +1,7 @@
 {
-  "name": "propresenter-ai-studio",
-  "version": "2.2.2",
-  "description": "Estación de control multimedia de escritorio para proyección multipantalla, transmisión en vivo, monitor de escenario, calendario de eventos y gestor de escrituras.",
+  "name": "capyworship",
+  "version": "3.0.0",
+  "description": "CapyWorship (MULTIMEDIOS • Tech for the Kingdom) — Estación de control multimedia de escritorio para proyección multipantalla, salida nativa de Videowall, transmisión en vivo (OBS/Resolume), monitor de escenario, calendario de eventos y gestor de escrituras.",
   "main": "main.js",
   "author": "ProPresenter AI Studio Team",
   "license": "MIT",
@@ -34,6 +34,7 @@
       "dist/**/*",
       "electron/**/*",
       "Branding/**/*",
+      "appsettings.json",
       "main.js",
       "preload.js",
       "package.json"

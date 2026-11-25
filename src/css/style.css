@@ -348,6 +348,133 @@ body {
   color: #fff;
 }
 
+.btn-alpha-toggle {
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #bae6fd;
+}
+
+.btn-alpha-toggle:hover {
+  border-color: #34d399;
+  color: #ffffff;
+}
+
+.btn-alpha-toggle.active {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(14, 165, 233, 0.25));
+  border-color: #34d399;
+  color: #6ee7b7;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.28);
+}
+
+.videowall-output-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-darkest);
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  padding: 2px;
+  gap: 3px;
+}
+
+.select-videowall-display {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.73rem;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+  max-width: 155px;
+}
+
+.select-videowall-display:hover,
+.select-videowall-display:focus {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.select-videowall-display option {
+  background: var(--bg-darkest);
+  color: #ffffff;
+}
+
+.videowall-image-mode-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-color);
+}
+
+.videowall-image-mode-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.select-videowall-image-mode {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 5px;
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+  max-width: 150px;
+}
+
+.select-videowall-image-mode:hover,
+.select-videowall-image-mode:focus {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.select-videowall-image-mode option {
+  background: var(--bg-darkest);
+  color: #ffffff;
+}
+
+.btn-videowall-toggle {
+  border-color: rgba(255, 174, 66, 0.35);
+  color: #fde68a;
+  padding: 4px 9px;
+}
+
+.btn-videowall-toggle:hover {
+  border-color: var(--color-brand-amber);
+  color: #ffffff;
+}
+
+.btn-videowall-toggle.active {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.28), rgba(5, 150, 105, 0.32));
+  border-color: #34d399;
+  color: #ecfdf5;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.32);
+}
+
+.videowall-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #64748b;
+  display: inline-block;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.btn-videowall-toggle.active .videowall-status-dot,
+.videowall-status-dot.active {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
 .btn-icon {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1192,6 +1319,38 @@ body {
   overflow: hidden;
   container-type: inline-size;
   container-name: monitorscreen;
+}
+
+.monitor-screen.alpha-preview-active {
+  background-color: #0b1120 !important;
+  background-image:
+    linear-gradient(45deg, rgba(148, 163, 184, 0.14) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(148, 163, 184, 0.14) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(148, 163, 184, 0.14) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(148, 163, 184, 0.14) 75%) !important;
+  background-size: 16px 16px !important;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0 !important;
+}
+
+.alpha-preview-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 4;
+  display: none;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #6ee7b7;
+  background: rgba(6, 78, 59, 0.88);
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  pointer-events: none;
+}
+
+.monitor-screen.alpha-preview-active .alpha-preview-badge {
+  display: inline-block;
 }
 
 #tab-monitors .monitor-screen {

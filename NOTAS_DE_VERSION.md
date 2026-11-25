@@ -1,6 +1,40 @@
-# 📝 Notas de Versión - ProPresenter AI Studio
+# 📝 Notas de Versión - CapyWorship
 
-Todas las novedades, mejoras y correcciones de errores importantes de **ProPresenter AI Studio** se documentan en este archivo.
+Todas las novedades, mejoras y correcciones de errores importantes de **CapyWorship** (*MULTIMEDIOS • Tech for the Kingdom*) se documentan en este archivo.
+
+---
+
+## 🚀 Versión 3.0.0 (Segunda Salida Nativa para Videowall, Modos de Imágenes/Anuncios y Consolidación CapyWorship) — *25 de Noviembre, 2026*
+
+Esta versión mayor (**v3.0.0**) introduce la **Segunda Salida Nativa para Videowall (`videowall.html`)** junto con el sistema inteligente de **Gestión de Imágenes y Anuncios en Videowall** y consolida oficialmente el nombre del software y del repositorio bajo la identidad **CapyWorship**.
+
+### ✨ Novedades Principales
+
+#### 📺 Segunda Salida Nativa para Videowall (Solo Videos)
+- **Ventana Nativa Independiente (`videowall.html`):** Nueva salida a pantalla completa en Electron que permite enviar **únicamente los videos/fondos activos** a un monitor o salida HDMI independiente (ej. Monitor 3 hacia la controladora de videowall), mientras la pantalla de **Audiencia (`audience.html`)** en el Monitor 2 sigue proyectando normalmente los videos junto con las letras, versículos, presentaciones y overlays.
+- **Cero Ruido Visual y Sin Audio Duplicado:** Lienzo negro puro (`#000000`), cursor oculto (`cursor: none`) y elemento `<video>` a pantalla completa (`object-fit: cover`) con `muted` permanente para evitar eco o doble audio con la salida principal de Audiencia.
+- **Continuidad Fluida entre Diapositivas:** Al avanzar o retroceder diapositivas dentro de una canción o show que conserva el mismo video de fondo, el video en `videowall.html` continúa reproduciéndose sin reiniciarse ni parpadear.
+- **Selector de Monitor y Toggle en Vivo:** Nuevos controles en la barra superior de la consola para elegir en qué monitor abrir el Videowall (guardando la preferencia en `localStorage`) y botón **Abrir / Cerrar Videowall** con indicador luminoso de estado activo/inactivo y sincronización instantánea del video en curso al abrirse.
+
+#### 🖼️ Gestión Inteligente de Imágenes y Anuncios en Videowall
+Para evitar que las placas, flyers o anuncios diseñados en formato horizontal se vean cortados o con texto deformado en los paneles/TVs del videowall, se incorporó el selector en vivo **"En imágenes/anuncios:"** con 3 modos de comportamiento:
+1. **`Mantener último video` (`sticky`, recomendado por defecto):** Mientras `audience.html` proyecta la placa o imagen del anuncio, `videowall.html` ignora la imagen y continúa reproduciendo en bucle continuo (`loop`) el último video proyectado (`lastVideoSrc`) sin cortes ni parpadeos (o permanece en negro si aún no se reprodujo ningún video en la sesión).
+2. **`Color ambiental (Blur)` (`blur`):** Activa una segunda **Capa Ambiental** a pantalla completa (`#videowall-ambient`) que toma la imagen o placa activa y genera un fondo atmosférico desenfocado y oscurecido con la paleta de colores del anuncio (`filter: blur(45px) brightness(0.55) saturate(1.2); transform: scale(1.15);`), sin bordes oscuros ni texto cortado, pausando el video de fondo para ahorrar recursos de GPU.
+3. **`Negro (Fade out)` (`black`):** Realiza un fundido suave (`transition: opacity 0.5s ease`) a negro puro (`#000000`) y pausa el video al concluir la transición.
+- **Cambio en Vivo y Prioridad de Blackout:** Cambiar de modo en el selector actualiza `videowall.html` al instante sin necesidad de cambiar de diapositiva. El botón **CLEAR ALL (Blackout)** o **Clear Media (F3)** tiene siempre prioridad absoluta y lleva el Videowall a negro puro (`#000000`) en cualquiera de los 3 modos.
+
+#### 🦫 Repositorio Oficial CapyWorship
+- El repositorio y el paquete de distribución pasan a llamarse oficialmente **CapyWorship** (`https://github.com/lmbaladovidal/CapyWorship.git`).
+
+---
+
+## 🚀 Versión 2.3.0 (Integración OBS / Spout / Resolume Arena — Modo Mixto) — *22 de Noviembre, 2026*
+
+### ✨ Novedades
+- **🌐 Servidor HTTP + SSE Local para OBS / Navegadores Externos:** Al iniciar la aplicación se levanta un servidor local en `http://127.0.0.1:3456` (configurable en `appsettings.json`) que sirve `audience.html` y transmite actualizaciones en tiempo real por `GET /events` (Server-Sent Events) con sincronización instantánea al conectar tarde y reproducción segura de medios locales.
+- **🎭 Modo Mixto con Canal Alpha Real (`?transparent=1`):** Permite usar `audience.html?transparent=1` como *Browser Source* en OBS (hacia Spout2 / Resolume Arena) con fondo 100% transparente cuando no hay fondo activo y renderizado normal al proyectar videos, imágenes o presentaciones.
+- **🟢 Toggle "Fondo Alpha" y Ajustes OBS / Resolume:** Nuevo botón en la barra superior para ocultar los fondos en vivo al instante sin borrar los fondos de las canciones (con indicador ajedrezado en la vista previa del operador) y modal de configuración accesible desde el icono de engranaje (`#btn-quick-settings`).
+- **🎛️ Cliente REST de Resolume Arena (`src/js/resolume-client.js`):** Módulo liviano con `triggerColumn(columnIndex)` y timeout corto con `AbortController`, listo para disparar columnas/escenas en Resolume Arena sin bloquear la consola si Resolume está cerrado.
 
 ---
 

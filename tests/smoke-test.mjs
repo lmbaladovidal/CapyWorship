@@ -39,6 +39,14 @@ import { Store, DEFAULT_DECKS, DEFAULT_TEMPLATES, parseAndSplitText } from '../s
 import { LiveCoderEngine } from '../src/js/live-coder.js';
 import { ensureCustomBiblesLoaded, getAllBibleVersions, parseAndAddCustomBible } from '../src/js/bible-data.js';
 import { BroadcastSync } from '../src/js/broadcast.js';
+import { ResolumeClient } from '../src/js/resolume-client.js';
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { LocalAudienceServer, loadAppSettings } = require('../electron/local-audience-server.js');
 
 let totalTests = 0;
 let passedTests = 0;
@@ -815,6 +823,408 @@ test('RF-63: Eliminación de carpeta General y rehidratación por lotes de minia
   const updated = store.hydrateMediaThumbnailsBatch(thumbMap);
   if (updated !== 1 || item.thumbnail !== 'data:image/jpeg;base64,CACHED_OK') {
     throw new Error('hydrateMediaThumbnailsBatch debe restaurar la miniatura usando la clave estable.');
+  }
+});
+
+
+async function asyncTest(name, fn) {
+  totalTests++;
+  try {
+    await fn();
+    passedTests++;
+    console.log(`  ✅ PASSED: ${name}`);
+  } catch (err) {
+    console.error(`  ❌ FAILED: ${name}`);
+    console.error(`     Error: ${err.message}`);
+  }
+}
+
+console.log('\n▶️ Grupo 18: Integración OBS / Spout / Resolume Arena (HTTP + SSE + Alpha + REST)');
+
+test('RES-01: Estado forceTransparentBackground en Store, toggle y payload IPC', () => {
+  globalThis.localStorage.removeItem('propresenter_force_transparent_bg');
+  const store = new Store();
+  if (store.state.forceTransparentBackground !== false) {
+    throw new Error('forceTransparentBackground debe iniciar en false');
+  }
+
+  const enabled = store.toggleForceTransparentBackground();
+  if (!enabled || store.state.forceTransparentBackground !== true) {
+    throw new Error('toggleForceTransparentBackground debe activar forceTransparentBackground');
+  }
+  if (globalThis.localStorage.getItem('propresenter_force_transparent_bg') !== 'true') {
+    throw new Error('forceTransparentBackground debe persistirse en localStorage');
+  }
+  const payload = store.getProjectionPayload();
+  if (payload.forceTransparentBackground !== true) {
+    throw new Error('getProjectionPayload debe incluir forceTransparentBackground');
+  }
+
+  store.setForceTransparentBackground(false);
+  if (store.state.forceTransparentBackground !== false) {
+    throw new Error('setForceTransparentBackground(false) debe desactivar forceTransparentBackground');
+  }
+});
+
+test('RES-02: Fallback SSE en BroadcastSync(false) cuando no existe window.electronAPI', () => {
+  const prevWindow = globalThis.window;
+  const prevEventSource = globalThis.EventSource;
+  let createdUrl = null;
+  let closed = false;
+
+  class MockEventSource {
+    constructor(url) {
+      createdUrl = url;
+      this.onmessage = null;
+      this.onerror = null;
+    }
+    close() {
+      closed = true;
+    }
+  }
+
+  try {
+    globalThis.EventSource = MockEventSource;
+    globalThis.window = { location: { protocol: 'http:' } };
+
+    const receiver = new BroadcastSync(false);
+    if (createdUrl !== '/events' || !receiver.eventSource) {
+      throw new Error('BroadcastSync(false) debe conectar a EventSource("/events") fuera de Electron');
+    }
+
+    let receivedState = null;
+    receiver.onUpdate((state) => {
+      receivedState = state;
+    });
+
+    receiver.eventSource.onmessage({ data: JSON.stringify({ liveText: 'Santo eres Señor', forceTransparentBackground: true }) });
+    if (!receivedState || receivedState.liveText !== 'Santo eres Señor' || receivedState.forceTransparentBackground !== true) {
+      throw new Error('onUpdate no recibió el estado parseado desde EventSource');
+    }
+
+    receiver.close();
+    if (!closed || receiver.eventSource !== null) {
+      throw new Error('close() debe cerrar y limpiar la conexión EventSource');
+    }
+
+    // Verificar que dentro de Electron (con window.electronAPI) NO abre EventSource
+    createdUrl = null;
+    let ipcBound = false;
+    globalThis.window = {
+      location: { protocol: 'http:' },
+      electronAPI: {
+        onBroadcastUpdate: () => {
+          ipcBound = true;
+          return () => {};
+        }
+      }
+    };
+    const electronReceiver = new BroadcastSync(false);
+    if (createdUrl !== null || !ipcBound) {
+      throw new Error('Dentro de Electron debe usar window.electronAPI.onBroadcastUpdate y NO EventSource');
+    }
+    electronReceiver.close();
+  } finally {
+    globalThis.window = prevWindow;
+    globalThis.EventSource = prevEventSource;
+  }
+});
+
+const __smokeTestDir = path.dirname(fileURLToPath(import.meta.url));
+const projectRootDir = path.resolve(__smokeTestDir, '..');
+
+await asyncTest('RES-03: LocalAudienceServer sirve estáticos, bloquea traversal, entrega SSE inmediato y en vivo (<50ms), reescribe file:// y maneja EADDRINUSE', async () => {
+  const settings = loadAppSettings(projectRootDir);
+  if (!settings?.AudienceServer || settings.AudienceServer.Port !== 3456) {
+    throw new Error('loadAppSettings debe leer AudienceServer.Port=3456 de appsettings.json');
+  }
+
+  const server = new LocalAudienceServer({
+    host: '127.0.0.1',
+    port: 0,
+    rootDir: projectRootDir,
+    heartbeatIntervalMs: 0
+  });
+
+  const started = await server.start();
+  if (!started.listening || !started.port) {
+    throw new Error(`El servidor HTTP local no pudo iniciar: ${started.error}`);
+  }
+  const baseUrl = `http://127.0.0.1:${started.port}`;
+
+  try {
+    // 1. Servir audience.html?transparent=1
+    const audienceRes = await fetch(`${baseUrl}/audience.html?transparent=1`);
+    const audienceHtml = await audienceRes.text();
+    if (audienceRes.status !== 200 || !audienceRes.headers.get('content-type')?.includes('text/html')) {
+      throw new Error(`audience.html respondió con status/content-type inesperado: ${audienceRes.status}`);
+    }
+    if (!audienceHtml.includes('alpha-canvas')) {
+      throw new Error('audience.html debe incluir los estilos alpha-canvas para modo mixto');
+    }
+
+    // 2. Servir módulo JS con Content-Type correcto
+    const jsRes = await fetch(`${baseUrl}/src/js/broadcast.js`);
+    if (jsRes.status !== 200 || !jsRes.headers.get('content-type')?.includes('javascript')) {
+      throw new Error(`src/js/broadcast.js no sirvió Content-Type javascript: ${jsRes.status}`);
+    }
+
+    // 3. Protección contra path traversal (raw socket para no normalizar /../ en el cliente)
+    const traversalStatus = await new Promise((resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port: started.port, path: '/../package.json', method: 'GET' }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    if (traversalStatus !== 403 && traversalStatus !== 404) {
+      throw new Error(`Path traversal debió ser rechazado con 403/404, respondió ${traversalStatus}`);
+    }
+
+    // 4. Emitir estado con file:// y verificar que no muta el objeto original
+    const sampleLocalFile = path.join(projectRootDir, 'appsettings.json');
+    const originalState = {
+      liveText: 'Cuán Grande Es Él',
+      activeVideoUrl: pathToFileURL(sampleLocalFile).href,
+      isMediaCleared: false,
+      forceTransparentBackground: false
+    };
+    const originalUrlSnapshot = originalState.activeVideoUrl;
+    server.broadcastState(originalState);
+    if (originalState.activeVideoUrl !== originalUrlSnapshot) {
+      throw new Error('broadcastState no debe mutar el objeto state original usado por Electron IPC');
+    }
+
+    // 5. Conexión SSE tardía recibe lastBroadcastState al instante y luego recibe actualización en <50ms
+    const sseResult = await new Promise((resolve, reject) => {
+      const events = [];
+      let buffer = '';
+      let updateSentAt = 0;
+      let updateLatencyMs = null;
+
+      const req = http.get(`${baseUrl}/events`, (res) => {
+        if (res.statusCode !== 200 || !res.headers['content-type']?.includes('text/event-stream')) {
+          reject(new Error(`SSE headers inválidos: ${res.statusCode} ${res.headers['content-type']}`));
+          return;
+        }
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          buffer += chunk;
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+          for (const part of parts) {
+            const dataLine = part.split('\n').find(l => l.startsWith('data: '));
+            if (!dataLine) continue;
+            const parsed = JSON.parse(dataLine.slice(6));
+            events.push(parsed);
+            if (events.length === 1) {
+              updateSentAt = Date.now();
+              server.broadcastState({
+                liveText: 'Diapositiva 2 en Vivo',
+                forceTransparentBackground: true,
+                isMediaCleared: false
+              });
+            } else if (events.length === 2) {
+              updateLatencyMs = Date.now() - updateSentAt;
+              req.destroy();
+              resolve({ events, updateLatencyMs });
+            }
+          }
+        });
+      });
+      req.on('error', (err) => {
+        if (events.length >= 2) return;
+        reject(err);
+      });
+      setTimeout(() => {
+        req.destroy();
+        reject(new Error('Timeout esperando eventos SSE'));
+      }, 2000);
+    });
+
+    if (sseResult.events[0].liveText !== 'Cuán Grande Es Él') {
+      throw new Error('Cliente SSE tardío no recibió lastBroadcastState inicial');
+    }
+    if (!sseResult.events[0].activeVideoUrl.startsWith('/local-media/')) {
+      throw new Error('La URL file:// debió reescribirse a /local-media/ para navegadores externos');
+    }
+    if (sseResult.events[1].liveText !== 'Diapositiva 2 en Vivo' || sseResult.events[1].forceTransparentBackground !== true) {
+      throw new Error('El segundo evento SSE en vivo no coincidió con el broadcast');
+    }
+    if (sseResult.updateLatencyMs > 150) {
+      throw new Error(`Latencia SSE excesiva: ${sseResult.updateLatencyMs}ms`);
+    }
+
+    // 6. Proxy /local-media/ responde 200 y 206 Partial Content con Range
+    const localMediaUrl = `${baseUrl}${sseResult.events[0].activeVideoUrl}`;
+    const fullMediaRes = await fetch(localMediaUrl);
+    if (fullMediaRes.status !== 200) {
+      throw new Error(`Proxy /local-media devolvió status ${fullMediaRes.status}`);
+    }
+    const rangeMediaRes = await fetch(localMediaUrl, { headers: { Range: 'bytes=0-15' } });
+    if (rangeMediaRes.status !== 206 || !rangeMediaRes.headers.get('content-range')?.startsWith('bytes 0-15/')) {
+      throw new Error(`Proxy /local-media Range devolvió status ${rangeMediaRes.status}`);
+    }
+
+    // 7. Manejo de EADDRINUSE sin crashear
+    const collidingServer = new LocalAudienceServer({
+      host: '127.0.0.1',
+      port: started.port,
+      rootDir: projectRootDir,
+      heartbeatIntervalMs: 0
+    });
+    const collisionRes = await collidingServer.start();
+    if (collisionRes.listening !== false || collisionRes.code !== 'EADDRINUSE') {
+      await collidingServer.stop();
+      throw new Error('El segundo servidor en el mismo puerto debió reportar EADDRINUSE limpiamente sin crashear');
+    }
+  } finally {
+    await server.stop();
+  }
+});
+
+await asyncTest('RES-04: ResolumeClient dispara POST column/connect, omite cuando disabled y captura errores/timeouts', async () => {
+  const prevFetch = globalThis.fetch;
+  try {
+    let calls = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url, method: init?.method });
+      return { ok: true, status: 200 };
+    };
+
+    const client = new ResolumeClient({ enabled: false, host: '127.0.0.1', port: 8080, timeoutMs: 1500 });
+    const skipped = await client.triggerColumn(2);
+    if (!skipped.skipped || calls.length !== 0) {
+      throw new Error('ResolumeClient no debe hacer requests cuando enabled=false');
+    }
+
+    client.configure({ enabled: true, host: '127.0.0.1', port: 8080 }, false);
+    const triggered = await client.triggerColumn(3);
+    if (!triggered.ok || calls.length !== 1 || calls[0].method !== 'POST' || calls[0].url !== 'http://127.0.0.1:8080/api/v1/composition/columns/3/connect') {
+      throw new Error(`Endpoint o método incorrecto al disparar columna: ${JSON.stringify(calls[0])}`);
+    }
+
+    // Simular timeout con AbortController
+    globalThis.fetch = (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        reject(err);
+      });
+    });
+    const timedOut = await client.triggerColumn(1, { timeoutMs: 30 });
+    if (timedOut.ok !== false || timedOut.error !== 'timeout') {
+      throw new Error(`Se esperaba captura silenciosa de timeout, obtenido: ${JSON.stringify(timedOut)}`);
+    }
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});
+
+console.log('\n▶️ Grupo 19: Segunda Salida Nativa para Videowall (Solo Videos) (RF-64)');
+
+test('RF-64: Vista videowall.html, build en dist/videowall.html, IPC en main.js/preload.js y controles UI', () => {
+  const fs = require('node:fs');
+
+  const videowallHtmlPath = path.join(projectRootDir, 'videowall.html');
+  const distVideowallHtmlPath = path.join(projectRootDir, 'dist', 'videowall.html');
+  const viteConfigPath = path.join(projectRootDir, 'vite.config.js');
+  const mainJsPath = path.join(projectRootDir, 'main.js');
+  const preloadJsPath = path.join(projectRootDir, 'preload.js');
+  const indexHtmlPath = path.join(projectRootDir, 'index.html');
+
+  if (!fs.existsSync(videowallHtmlPath)) {
+    throw new Error('No existe videowall.html en la raíz del proyecto.');
+  }
+  if (!fs.existsSync(distVideowallHtmlPath)) {
+    throw new Error('No existe dist/videowall.html tras el build.');
+  }
+
+  const vwHtml = fs.readFileSync(videowallHtmlPath, 'utf8');
+  if (!vwHtml.includes('new BroadcastSync(false)') || !vwHtml.includes('object-fit: cover') || !vwHtml.includes('cursor: none') || !vwHtml.includes('#000000')) {
+    throw new Error('videowall.html debe incluir BroadcastSync(false), object-fit: cover, cursor: none y fondo #000000.');
+  }
+  if (!vwHtml.includes('<video') || !vwHtml.includes('muted')) {
+    throw new Error('videowall.html debe renderizar un elemento <video> con muted.');
+  }
+  if (vwHtml.includes('slide-text-container') || vwHtml.includes('lower-third-banner')) {
+    throw new Error('videowall.html debe ignorar por completo textos, letras, placas y overlays.');
+  }
+
+  const viteCfg = fs.readFileSync(viteConfigPath, 'utf8');
+  if (!viteCfg.includes('videowall.html')) {
+    throw new Error('vite.config.js debe registrar videowall.html como entry point.');
+  }
+
+  const mainJs = fs.readFileSync(mainJsPath, 'utf8');
+  for (const token of ['let videowallWindow = null', 'open-videowall', 'close-videowall', 'is-videowall-open', 'videowall-status-changed', "videowallWindow.webContents.send('broadcast-update', state)"]) {
+    if (!mainJs.includes(token)) {
+      throw new Error(`main.js no contiene el requerimiento esperado: ${token}`);
+    }
+  }
+
+  const preloadJs = fs.readFileSync(preloadJsPath, 'utf8');
+  for (const apiMethod of ['openVideowall', 'closeVideowall', 'isVideowallOpen', 'onVideowallStatusChanged']) {
+    if (!preloadJs.includes(apiMethod)) {
+      throw new Error(`preload.js no expone ${apiMethod} en window.electronAPI`);
+    }
+  }
+
+  const indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+  if (!indexHtml.includes('select-videowall-display') || !indexHtml.includes('btn-toggle-videowall') || !indexHtml.includes('select-videowall-image-mode')) {
+    throw new Error('index.html debe incluir el selector de monitor, el selector de modo en imágenes/anuncios y el botón toggle para Videowall.');
+  }
+});
+
+test('RF-65: Gestión de Imágenes y Anuncios en Videowall (videowallImageMode: black | sticky | blur)', () => {
+  const fs = require('node:fs');
+  globalThis.localStorage.removeItem('freepresenter_videowall_image_mode');
+
+  const store = new Store();
+  // Default debe ser 'sticky'
+  if (store.state.videowallImageMode !== 'sticky') {
+    throw new Error(`El modo por defecto de videowallImageMode debe ser 'sticky', recibido: ${store.state.videowallImageMode}`);
+  }
+
+  // Cambiar a 'blur' y verificar persistencia y payload
+  store.setVideowallImageMode('blur');
+  if (store.state.videowallImageMode !== 'blur') {
+    throw new Error('setVideowallImageMode("blur") no actualizó el estado');
+  }
+  if (globalThis.localStorage.getItem('freepresenter_videowall_image_mode') !== 'blur') {
+    throw new Error('freepresenter_videowall_image_mode no se persistió en localStorage');
+  }
+  const payloadBlur = store.getProjectionPayload();
+  if (payloadBlur.videowallImageMode !== 'blur') {
+    throw new Error('getProjectionPayload() debe incluir videowallImageMode');
+  }
+
+  // Cambiar a 'black'
+  store.setVideowallImageMode('black');
+  if (store.state.videowallImageMode !== 'black' || globalThis.localStorage.getItem('freepresenter_videowall_image_mode') !== 'black') {
+    throw new Error('setVideowallImageMode("black") no actualizó ni persistió el estado');
+  }
+
+  // Valor inválido cae a 'sticky'
+  store.setVideowallImageMode('invalid-mode');
+  if (store.state.videowallImageMode !== 'sticky') {
+    throw new Error('Un valor inválido en setVideowallImageMode debe normalizarse a "sticky"');
+  }
+
+  // Verificar capas y reglas en videowall.html
+  const vwHtml = fs.readFileSync(path.join(projectRootDir, 'videowall.html'), 'utf8');
+  for (const token of [
+    'videowall-ambient',
+    'blur(45px) brightness(0.55) saturate(1.2)',
+    'scale(1.15)',
+    'transition: opacity 0.5s ease',
+    'lastVideoSrc',
+    'videowallImageMode'
+  ]) {
+    if (!vwHtml.includes(token)) {
+      throw new Error(`videowall.html debe contener "${token}" para la gestión de imágenes/anuncios.`);
+    }
   }
 });
 

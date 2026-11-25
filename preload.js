@@ -41,6 +41,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('audience-status-changed', handler);
     return () => ipcRenderer.removeListener('audience-status-changed', handler);
   },
+  openVideowall: (displayId) => ipcRenderer.invoke('open-videowall', displayId),
+  closeVideowall: () => ipcRenderer.invoke('close-videowall'),
+  isVideowallOpen: () => ipcRenderer.invoke('is-videowall-open'),
+  onVideowallStatusChanged: (callback) => {
+    const handler = (_event, isOpen) => callback(isOpen);
+    ipcRenderer.on('videowall-status-changed', handler);
+    return () => ipcRenderer.removeListener('videowall-status-changed', handler);
+  },
   // Importación de Presentaciones (PPTX / PPT / PPSX / ODP / PDF)
   selectPresentationFile: () => ipcRenderer.invoke('select-presentation-file'),
   getPresentationEngines: () => ipcRenderer.invoke('get-presentation-engines'),
@@ -65,6 +73,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = () => callback();
     ipcRenderer.on('splash-fade-out', handler);
     return () => ipcRenderer.removeListener('splash-fade-out', handler);
-  }
+  },
+  getAppSettings: () => ipcRenderer.invoke('get-app-settings'),
+  getAudienceServerInfo: () => ipcRenderer.invoke('get-audience-server-info')
 });
 

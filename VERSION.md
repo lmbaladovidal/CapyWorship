@@ -1,12 +1,35 @@
-# 📌 Historial de Versiones — ProPresenter Studio
+# 📌 Historial de Versiones — CapyWorship
 
-Este archivo registra el control de versiones, cambios granulares, mejoras y correcciones aplicadas a **ProPresenter Studio**. Se actualiza continuamente con cada versión publicada.
+Este archivo registra el control de versiones, cambios granulares, mejoras y correcciones aplicadas a **CapyWorship** (*MULTIMEDIOS • Tech for the Kingdom*). Se actualiza continuamente con cada versión publicada.
 
 ---
 
-## 📌 Versión Actual: `v2.2.2` (Build 20261122.1)
+## 📌 Versión Actual: `v3.0.0` (Build 20261125.1)
 
 ### 🗓️ Registro de Cambios (Changelog Histórico)
+
+### [3.0.0] - 2026-11-25
+#### 🚀 Lanzamiento Mayor 3.0 — Segunda Salida Nativa para Videowall, Modos Inteligentes de Imágenes/Anuncios y Consolidación CapyWorship
+- **Segunda Salida Nativa para Videowall (`videowall.html`):**
+  - Nueva ventana nativa en Electron (`videowallWindow`) independiente de `audienceWindow` y `stageWindow`, diseñada para abrirse en pantalla completa sin bordes (`fullscreen: true`, `frame: false`, `backgroundColor: '#000000'`, `cursor: none`) en un monitor dedicado (ej. Monitor 3 / controladora HDMI de videowall).
+  - Renderiza **únicamente los videos/fondos activos** (`object-fit: cover`, `muted`) ignorando textos, letras de canciones, versículos, relojes, banners, placas y overlays de shows.
+  - Continuidad perfecta: al cambiar de diapositiva o texto dentro de una canción que mantiene el mismo video de fondo, el `<video>` continúa reproduciéndose sin recargarse ni parpadear.
+  - Controles en la barra superior (`index.html` / `src/js/app.js`): selector de monitor (`#select-videowall-display`) persistido en `localStorage` (`propresenter_videowall_display_id`) y botón toggle **Abrir / Cerrar Videowall** (`#btn-toggle-videowall`) con indicador visual de estado en vivo y sincronización instantánea al abrir.
+- **Gestión Inteligente de Imágenes y Anuncios en Videowall (`videowallImageMode`):**
+  - Nuevo selector en vivo **"En imágenes/anuncios:"** (`#select-videowall-image-mode`) persistido en `localStorage` (`freepresenter_videowall_image_mode`) y transmitido en `STATE_UPDATE` con 3 modos de comportamiento cuando se proyecta una imagen, placa o anuncio:
+    1. `black` — **Negro (Fade out):** Fundido suave (`transition: opacity 0.5s ease`) de todas las capas hacia negro puro (`#000000`) y pausa del video al finalizar el fade.
+    2. `sticky` — **Mantener último video** *(por defecto)*: Ignora la imagen y mantiene visible y en reproducción continua en loop el último video proyectado (`lastVideoSrc`) sin cortes (o negro puro si aún no se reprodujo ningún video en la sesión).
+    3. `blur` — **Color ambiental (Blur):** Activa la nueva **Capa Ambiental** (`#videowall-ambient`) a pantalla completa con la imagen activa desenfocada y oscurecida (`filter: blur(45px) brightness(0.55) saturate(1.2); transform: scale(1.15);`) mientras oculta y pausa la capa de video para ahorrar recursos de GPU.
+  - Prioridad absoluta de **Blackout / Limpiar Todo**: activar `CLEAR ALL` o limpiar el fondo apaga inmediatamente `videowall.html` a `#000000` en cualquiera de los 3 modos.
+- **Renombrado Oficial del Repositorio y Paquete a `CapyWorship`:**
+  - Actualización oficial del nombre del paquete y repositorio a **CapyWorship** (`https://github.com/lmbaladovidal/CapyWorship.git`).
+
+### [2.3.0] - 2026-11-22
+#### ✨ Integración OBS / Spout / Resolume Arena (Modo Mixto)
+- **Servidor HTTP + SSE Local (`electron/local-audience-server.js`):** Servidor nativo en `127.0.0.1:3456` (configurable en `appsettings.json`) que sirve `audience.html`, sus recursos estáticos y el endpoint `/events` (`text/event-stream`) con envío inmediato de `lastBroadcastState`, heartbeat cada 25 s, cierre limpio en `will-quit` y proxy `/local-media/:token/:filename` con soporte `Range`.
+- **Fallback SSE en `BroadcastSync`:** Cuando `audience.html` se abre fuera de Electron (ej. Browser Source de OBS, Chrome o Edge), se conecta automáticamente a `EventSource('/events')` manteniendo intactos `BroadcastChannel` e IPC en Electron.
+- **Modo Mixto con Canal Alpha Real:** Soporte de `?transparent=1` / `?mode=mixed` y `?transparent=force` en `audience.html` (`html.alpha-canvas, body.alpha-canvas`), ocultando el fondo únicamente cuando no hay media activo o cuando se activa **Fondo Alpha**.
+- **Control UI y Cliente Resolume REST (`src/js/resolume-client.js`):** Botón **Fondo Alpha** en la barra superior (`forceTransparentBackground`), vista previa ajedrezada en el monitor del operador, modal de configuración OBS/Resolume (`#modal-obs-resolume-settings`) y cliente `ResolumeClient` (`triggerColumn`) con `AbortController`.
 
 ### [2.2.2] - 2026-11-22
 #### 🐛 Correcciones y Mejoras de Flujo en Vivo

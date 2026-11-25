@@ -1,7 +1,8 @@
-# 🎭 ProPresenter Studio
+# 🦫 CapyWorship — MULTIMEDIOS • Tech for the Kingdom
 
-> **Aplicación de escritorio nativa para transmisión en vivo, proyección en pantalla gigante (Audiencia) y monitor de escenario (Stage Display) con gestor de escrituras, calendario de eventos y control multipantalla.**
+> **Aplicación de escritorio nativa (`v3.0.0`) para transmisión en vivo, proyección en pantalla principal (Audiencia), segunda salida nativa para Videowall (Solo Videos + Modos Ambientales) y monitor de escenario (Stage Display) con gestor de escrituras, calendario de eventos e integración OBS / Resolume Arena.**
 
+![Version 3.0.0](https://img.shields.io/badge/Version-3.0.0-FF7A00.svg)
 ![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Electron](https://img.shields.io/badge/Electron-43.4.1-47848F?logo=electron&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5.4.21-646CFF?logo=vite&logoColor=white)
@@ -11,14 +12,15 @@
 
 ## 🌟 Descripción General
 
-**ProPresenter Studio** es una estación de control multimedia para iglesias, conferencias, transmisiones en vivo y eventos escénicos. Diseñada como una **aplicación de escritorio nativa (.exe / instalador)** basada en **Electron y Vite**, ofrece rendimiento ultrarrápido, gestión multipantalla (Pantalla de Audiencia + Monitor de Escenario para predicadores y músicos), transiciones fluidas en tiempo real (Cut / Fade configurable), gestor de eventos con **Calendario** e importador inteligente de Escrituras capaz de cargar cualquier Biblia vía enlace URL o archivo JSON.
+**CapyWorship** es una estación de control multimedia para iglesias, conferencias, transmisiones en vivo y eventos escénicos. Diseñada como una **aplicación de escritorio nativa (.exe / instalador)** basada en **Electron y Vite**, ofrece rendimiento ultrarrápido, gestión multipantalla (**Pantalla de Audiencia + Salida Nativa para Videowall + Monitor de Escenario para predicadores y músicos**), integración HTTP/SSE con canal Alpha para **OBS / Spout / Resolume Arena**, transiciones fluidas en tiempo real (Cut / Fade configurable), gestor de eventos con **Calendario** e importador inteligente de Escrituras.
 
 ---
 
 ## 🚀 Características Principales
 
-- 🖥️ **Control Multipantalla Nativo:**
-  - **Ventana de Audiencia (`audience.html`):** Salida a pantalla completa para proyectores, monitores gigantes o señales de video (NDI/OBS).
+- 🖥️ **Control Multipantalla Nativo (3 Salidas Independientes):**
+  - **Ventana de Audiencia (`audience.html`):** Salida principal a pantalla completa para proyectores, pantallas principales o Browser Source con canal Alpha en OBS (`http://127.0.0.1:3456/audience.html?transparent=1`).
+  - **Salida Nativa para Videowall (`videowall.html`):** Segunda salida a pantalla completa en un monitor independiente que reproduce **únicamente los videos/fondos activos** (sin letras, versículos ni overlays y con audio silenciado), incluyendo selector de comportamiento ante imágenes/anuncios (**Mantener último video**, **Color ambiental Blur** o **Negro Fade out**).
   - **Monitor de Escenario / Stage Display (`stage.html`):** Vista dedicada para predicadores y músicos con reloj digital, temporizadores regresivos, diapositiva actual y vista previa de la siguiente filmina.
 
 - ⚡ **Motor de Transiciones en Vivo:**
@@ -79,8 +81,8 @@
 
 1. **Clonar el repositorio:**
    ```bash
-   git clone https://github.com/tu-usuario/propresenter-ai-studio.git
-   cd propresenter-ai-studio
+   git clone https://github.com/lmbaladovidal/CapyWorship.git
+   cd CapyWorship
    ```
 
 2. **Instalar dependencias:**
@@ -109,7 +111,7 @@ Para generar la aplicación ejecutable nativa para Windows (`.exe`):
    npm run package:exe
    ```
 2. El archivo ejecutable nativo quedará disponible en la carpeta:
-   `release-builds/ProPresenter AI Studio-win32-x64/ProPresenter AI Studio.exe`
+   `release-builds/CapyWorship-win32-x64/CapyWorship.exe`
 
 ---
 

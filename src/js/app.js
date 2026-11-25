@@ -11,6 +11,7 @@ import { calendarManager } from './calendar-manager.js';
 import { MediaCache } from './media-cache.js';
 import { importPresentationSource, isPresentationFileName } from './presentation-importer.js';
 import { initIcons, iconSvg, getSectionIconSvg, getCategoryIconSvg } from './icons.js';
+import { resolumeClient } from './resolume-client.js';
 import pkg from '../../package.json';
 
 class ProPresenterApp {
@@ -29,10 +30,14 @@ class ProPresenterApp {
     this.scriptureQuery = '';
     this.matchedBookSuggestion = null;
     this.isAudienceOpen = false;
+    this.isVideowallOpen = false;
+    this.videowallPopup = null;
+    this.selectedVideowallDisplayId = (typeof localStorage !== 'undefined' && localStorage.getItem('propresenter_videowall_display_id')) || '';
     this.projectSearchQuery = '';
     this.editingDeckId = null;
     this.originalEditLines = [];
     this.originalSlideEditLines = [];
+    this._lastResolumeTriggerKey = '';
 
     // Track Audience window status for operator audio echo prevention
     sync.onAudiencePresence((isOpen) => {
@@ -58,6 +63,19 @@ class ProPresenterApp {
           this.updateOperatorAudioMute();
         }).catch(() => {});
       }
+      if (typeof window.electronAPI.onVideowallStatusChanged === 'function') {
+        window.electronAPI.onVideowallStatusChanged((isOpen) => {
+          this.updateVideowallStatusUI(!!isOpen);
+          if (isOpen) {
+            sync.sendUpdate(store.getProjectionPayload());
+          }
+        });
+      }
+      if (typeof window.electronAPI.isVideowallOpen === 'function') {
+        window.electronAPI.isVideowallOpen().then(isOpen => {
+          this.updateVideowallStatusUI(!!isOpen);
+        }).catch(() => {});
+      }
     }
 
     window.closeAllModals = () => this.closeAllModals();
@@ -75,7 +93,7 @@ class ProPresenterApp {
     // Subscribe to state changes and sync displays
     store.subscribe((state, decks) => {
       this.renderUI(state, decks);
-      sync.sendUpdate(state);
+      this.handleResolumeSceneTrigger(state);
     });
 
     // Initial view render
@@ -260,6 +278,20 @@ class ProPresenterApp {
         window.open('stage.html', 'ProPresenterStage', 'width=1024,height=600,menubar=no,toolbar=no');
       }
     });
+
+    this.initVideowallControls();
+
+    document.getElementById('btn-toggle-alpha-bg')?.addEventListener('click', () => {
+      const active = store.toggleForceTransparentBackground();
+      this.showToast(
+        active
+          ? 'Fondo Alpha (Resolume) activado: fondos ocultos en salida.'
+          : 'Fondo Alpha desactivado: fondos restaurados.',
+        'info'
+      );
+    });
+
+    this.bindObsResolumeModalEvents();
 
     // 2. Master Clear Bar
     document.getElementById('btn-clear-all')?.addEventListener('click', () => store.clearAll());
@@ -1336,6 +1368,138 @@ class ProPresenterApp {
     if (bgB) {
       bgB.muted = shouldMute;
       bgB.volume = vol;
+    }
+  }
+
+  initVideowallControls() {
+    const selectEl = document.getElementById('select-videowall-display');
+    const selectImageModeEl = document.getElementById('select-videowall-image-mode');
+    const btnToggle = document.getElementById('btn-toggle-videowall');
+
+    this.populateVideowallDisplays();
+
+    if (selectImageModeEl) {
+      selectImageModeEl.value = store.state.videowallImageMode || 'sticky';
+      selectImageModeEl.addEventListener('change', () => {
+        store.setVideowallImageMode(selectImageModeEl.value);
+      });
+    }
+
+    selectEl?.addEventListener('change', () => {
+      const val = selectEl.value;
+      this.selectedVideowallDisplayId = val;
+      try {
+        localStorage.setItem('propresenter_videowall_display_id', String(val));
+      } catch (_) {}
+
+      if (this.isVideowallOpen && window.electronAPI?.openVideowall) {
+        window.electronAPI.openVideowall(val);
+        sync.sendUpdate(store.getProjectionPayload());
+      }
+    });
+
+    btnToggle?.addEventListener('click', () => {
+      this.toggleVideowallWindow();
+    });
+  }
+
+  async populateVideowallDisplays() {
+    const selectEl = document.getElementById('select-videowall-display');
+    if (!selectEl) return;
+
+    const savedId = (typeof localStorage !== 'undefined' && localStorage.getItem('propresenter_videowall_display_id')) || '';
+    let displays = [];
+
+    if (window.electronAPI && typeof window.electronAPI.getDisplays === 'function') {
+      try {
+        const list = await window.electronAPI.getDisplays();
+        if (Array.isArray(list) && list.length > 0) {
+          displays = list;
+        }
+      } catch (_) {}
+    }
+
+    if (displays.length === 0) {
+      displays = [
+        { id: '1', index: 1, bounds: { width: 1920, height: 1080 }, isPrimary: true },
+        { id: '2', index: 2, bounds: { width: 1920, height: 1080 }, isPrimary: false },
+        { id: '3', index: 3, bounds: { width: 1920, height: 1080 }, isPrimary: false }
+      ];
+    }
+
+    selectEl.innerHTML = displays.map(d => {
+      const label = `Monitor ${d.index}${d.isPrimary ? ' (Principal)' : ''} (${d.bounds?.width || 1920}×${d.bounds?.height || 1080})`;
+      return `<option value="${d.id}">${label}</option>`;
+    }).join('');
+
+    let chosenId = '';
+    if (savedId && displays.some(d => String(d.id) === String(savedId))) {
+      chosenId = String(savedId);
+    } else {
+      const defaultDisplay = displays[2] || displays.find(d => !d.isPrimary) || displays[0];
+      chosenId = defaultDisplay ? String(defaultDisplay.id) : '';
+      if (chosenId) {
+        try {
+          localStorage.setItem('propresenter_videowall_display_id', chosenId);
+        } catch (_) {}
+      }
+    }
+
+    if (chosenId) {
+      selectEl.value = chosenId;
+      this.selectedVideowallDisplayId = chosenId;
+    }
+  }
+
+  updateVideowallStatusUI(isOpen) {
+    this.isVideowallOpen = Boolean(isOpen);
+    const btnToggle = document.getElementById('btn-toggle-videowall');
+    const lblToggle = document.getElementById('lbl-toggle-videowall');
+    const dotEl = document.getElementById('videowall-status-dot');
+
+    if (btnToggle) {
+      btnToggle.classList.toggle('active', this.isVideowallOpen);
+      btnToggle.setAttribute('aria-pressed', String(this.isVideowallOpen));
+    }
+    if (dotEl) {
+      dotEl.classList.toggle('active', this.isVideowallOpen);
+    }
+    if (lblToggle) {
+      lblToggle.textContent = this.isVideowallOpen ? 'Cerrar Videowall' : 'Abrir Videowall';
+    }
+  }
+
+  async toggleVideowallWindow() {
+    const selectEl = document.getElementById('select-videowall-display');
+    const displayId = selectEl ? selectEl.value : this.selectedVideowallDisplayId;
+    if (displayId) {
+      this.selectedVideowallDisplayId = displayId;
+      try {
+        localStorage.setItem('propresenter_videowall_display_id', String(displayId));
+      } catch (_) {}
+    }
+
+    if (window.electronAPI && typeof window.electronAPI.openVideowall === 'function') {
+      if (this.isVideowallOpen) {
+        await window.electronAPI.closeVideowall?.();
+        this.updateVideowallStatusUI(false);
+      } else {
+        await window.electronAPI.openVideowall(displayId);
+        this.updateVideowallStatusUI(true);
+        sync.sendUpdate(store.getProjectionPayload());
+      }
+    } else {
+      if (this.videowallPopup && !this.videowallPopup.closed) {
+        this.videowallPopup.close();
+        this.videowallPopup = null;
+        this.updateVideowallStatusUI(false);
+      } else {
+        this.videowallPopup = window.open('videowall.html', 'ProPresenterVideowall', 'width=1280,height=720,menubar=no,toolbar=no');
+        this.updateVideowallStatusUI(true);
+        setTimeout(() => {
+          sync.sendUpdate(store.getProjectionPayload());
+        }, 120);
+      }
     }
   }
 
@@ -5430,6 +5594,143 @@ class ProPresenterApp {
     });
   }
 
+  bindObsResolumeModalEvents() {
+    const modal = document.getElementById('modal-obs-resolume-settings');
+    const btnOpen = document.getElementById('btn-quick-settings');
+    const btnClose = document.getElementById('btn-close-obs-settings');
+    const btnCancel = document.getElementById('btn-cancel-obs-settings');
+    const btnCopyMixed = document.getElementById('btn-copy-obs-url');
+    const btnCopyForce = document.getElementById('btn-copy-obs-force-url');
+    const inputMixedUrl = document.getElementById('input-obs-mixed-url');
+    const inputForceUrl = document.getElementById('input-obs-force-url');
+    const statusBadge = document.getElementById('badge-audience-server-status');
+    const checkAlphaBg = document.getElementById('check-modal-alpha-bg');
+    const checkResolumeEnabled = document.getElementById('check-resolume-enabled');
+    const inputResolumeHost = document.getElementById('input-resolume-host');
+    const inputResolumePort = document.getElementById('input-resolume-port');
+    const inputTestCol = document.getElementById('input-resolume-test-col');
+    const btnTestCol = document.getElementById('btn-test-resolume-col');
+    const btnSaveResolume = document.getElementById('btn-save-resolume-settings');
+
+    if (window.electronAPI?.getAppSettings) {
+      window.electronAPI.getAppSettings().then((settings) => {
+        if (settings) {
+          resolumeClient.loadConfig(settings);
+        }
+      }).catch(() => {});
+    }
+
+    const syncModalFields = async () => {
+      if (checkAlphaBg) {
+        checkAlphaBg.checked = Boolean(store.state.forceTransparentBackground);
+      }
+      const cfg = resolumeClient.getConfig();
+      if (checkResolumeEnabled) checkResolumeEnabled.checked = Boolean(cfg.enabled);
+      if (inputResolumeHost) inputResolumeHost.value = cfg.host || '127.0.0.1';
+      if (inputResolumePort) inputResolumePort.value = String(cfg.port || 8080);
+
+      if (window.electronAPI?.getAudienceServerInfo) {
+        try {
+          const info = await window.electronAPI.getAudienceServerInfo();
+          if (info) {
+            if (inputMixedUrl && info.url) inputMixedUrl.value = info.url;
+            if (inputForceUrl && info.forceUrl) inputForceUrl.value = info.forceUrl;
+            if (statusBadge) {
+              statusBadge.textContent = info.running ? `Activo :${info.port}` : `Inactivo (:${info.port})`;
+              statusBadge.style.color = info.running ? '#34d399' : '#fbbf24';
+              statusBadge.style.background = info.running ? 'rgba(16, 185, 129, 0.16)' : 'rgba(245, 158, 11, 0.16)';
+            }
+          }
+        } catch (_) {}
+      } else if (statusBadge) {
+        const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'http://127.0.0.1:3456';
+        if (inputMixedUrl) inputMixedUrl.value = `${origin}/audience.html?transparent=1`;
+        if (inputForceUrl) inputForceUrl.value = `${origin}/audience.html?transparent=force`;
+        statusBadge.textContent = 'Modo Navegador';
+      }
+    };
+
+    const copyUrlInput = async (inputEl, label) => {
+      const value = inputEl?.value || '';
+      if (!value) return;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(value);
+        } else {
+          inputEl.select();
+          document.execCommand('copy');
+        }
+        this.showToast(`${label} copiada al portapapeles.`, 'success');
+      } catch {
+        inputEl.select();
+        this.showToast('Selecciona y copia la URL con Ctrl+C.', 'info');
+      }
+    };
+
+    btnOpen?.addEventListener('click', async () => {
+      if (!modal) return;
+      this.closeAllModals();
+      await syncModalFields();
+      modal.classList.add('open');
+      this.ensureModalInteractive(modal, inputMixedUrl);
+    });
+
+    const closeObsModal = () => modal?.classList.remove('open');
+    btnClose?.addEventListener('click', closeObsModal);
+    btnCancel?.addEventListener('click', closeObsModal);
+    btnCopyMixed?.addEventListener('click', () => copyUrlInput(inputMixedUrl, 'URL Modo Mixto OBS'));
+    btnCopyForce?.addEventListener('click', () => copyUrlInput(inputForceUrl, 'URL Fondo Forzado OBS'));
+
+    checkAlphaBg?.addEventListener('change', () => {
+      store.setForceTransparentBackground(checkAlphaBg.checked);
+    });
+
+    btnSaveResolume?.addEventListener('click', () => {
+      const updated = resolumeClient.configure({
+        enabled: Boolean(checkResolumeEnabled?.checked),
+        host: inputResolumeHost?.value || '127.0.0.1',
+        port: Number.parseInt(inputResolumePort?.value || '8080', 10)
+      });
+      this.showToast(
+        `Resolume ${updated.enabled ? 'habilitado' : 'deshabilitado'} (${updated.host}:${updated.port}).`,
+        'success'
+      );
+      closeObsModal();
+    });
+
+    btnTestCol?.addEventListener('click', async () => {
+      const col = Number.parseInt(inputTestCol?.value || '1', 10) || 1;
+      const res = await resolumeClient.triggerColumn(col, {
+        force: true,
+        host: inputResolumeHost?.value || undefined,
+        port: Number.parseInt(inputResolumePort?.value || '', 10) || undefined
+      });
+      if (res.ok) {
+        this.showToast(`Columna ${col} disparada en Resolume.`, 'success');
+      } else {
+        this.showToast(`Sin respuesta de Resolume (${res.error || res.status || 'desconectado'}).`, 'warn');
+      }
+    });
+  }
+
+  handleResolumeSceneTrigger(state) {
+    if (!state || state.isTextCleared || !state.liveSlideId) return;
+    const triggerKey = `${state.liveDeckId || ''}:${state.liveSlideId}`;
+    if (triggerKey === this._lastResolumeTriggerKey) return;
+    this._lastResolumeTriggerKey = triggerKey;
+
+    if (!resolumeClient.getConfig().enabled) return;
+
+    const liveDeck = (store.decks || []).find(d => d.id === state.liveDeckId);
+    const liveGroup = liveDeck?.groups?.[state.liveGroupIndex];
+    const liveSlide = liveGroup?.slides?.[state.liveSlideIndex];
+    const targetColumn = liveSlide?.resolumeColumn ?? liveDeck?.resolumeColumn;
+
+    if (targetColumn !== undefined && targetColumn !== null && Number.parseInt(targetColumn, 10) >= 1) {
+      resolumeClient.triggerColumn(targetColumn).catch(() => {});
+    }
+  }
+
   renderUI(state, decks) {
     // 1. Sidebar Project Decks (con búsqueda instantánea en toda la biblioteca descargada)
     const hasProjSearch = Boolean(this.projectSearchQuery && this.projectSearchQuery.trim().length > 0);
@@ -5757,6 +6058,31 @@ class ProPresenterApp {
       btn.classList.toggle('active', btn.getAttribute('data-mode') === state.mediaTransition);
     });
 
+    // Sync Fondo Alpha (Resolume) toggle & preview checkerboard state
+    const isAlphaBgActive = Boolean(state.forceTransparentBackground);
+    const btnAlphaBg = document.getElementById('btn-toggle-alpha-bg');
+    const lblAlphaBg = document.getElementById('lbl-alpha-bg-toggle');
+    if (btnAlphaBg) {
+      btnAlphaBg.classList.toggle('active', isAlphaBgActive);
+      btnAlphaBg.setAttribute('aria-pressed', String(isAlphaBgActive));
+    }
+    if (lblAlphaBg) {
+      lblAlphaBg.textContent = isAlphaBgActive ? 'Fondo Alpha ON' : 'Fondo Alpha';
+    }
+    const checkModalAlphaBg = document.getElementById('check-modal-alpha-bg');
+    if (checkModalAlphaBg) {
+      checkModalAlphaBg.checked = isAlphaBgActive;
+    }
+    const monitorScreenEl = document.getElementById('operator-monitor-screen');
+    if (monitorScreenEl) {
+      monitorScreenEl.classList.toggle('alpha-preview-active', isAlphaBgActive);
+    }
+
+    const selectVwImgMode = document.getElementById('select-videowall-image-mode');
+    if (selectVwImgMode && document.activeElement !== selectVwImgMode && state.videowallImageMode) {
+      selectVwImgMode.value = state.videowallImageMode;
+    }
+
     // 4. Operator Live Video Preview (Dual Layer Crossfade)
     const dur = state.fadeDuration || 250;
     const mediaMode = state.mediaTransition || 'fade';
@@ -5788,7 +6114,7 @@ class ProPresenterApp {
       bgA.loop = shouldLoop;
       bgB.loop = shouldLoop;
 
-      if (state.isMediaCleared || !state.activeVideoUrl) {
+      if (state.forceTransparentBackground || state.isMediaCleared || !state.activeVideoUrl) {
         if (mediaMode === 'cut') {
           bgA.style.transition = 'none';
           bgB.style.transition = 'none';
@@ -5813,7 +6139,7 @@ class ProPresenterApp {
           this.operatorMediaPlayId = 0;
           if (this._operatorClearVramTimeout) clearTimeout(this._operatorClearVramTimeout);
           this._operatorClearVramTimeout = setTimeout(() => {
-            if (store.state.isMediaCleared || !store.state.activeVideoUrl) {
+            if (store.state.forceTransparentBackground || store.state.isMediaCleared || !store.state.activeVideoUrl) {
               bgA.removeAttribute('src');
               bgB.removeAttribute('src');
               try { bgA.load(); bgB.load(); } catch (e) {}
@@ -6121,7 +6447,10 @@ class ProPresenterApp {
     const statusBgLayer = document.getElementById('status-bg-layer');
     if (statusBgLayer) {
       const qLen = Array.isArray(state.mediaQueue) ? state.mediaQueue.length : 0;
-      if (state.isMediaCleared || !state.activeVideoUrl) {
+      if (state.forceTransparentBackground) {
+        statusBgLayer.textContent = "ALPHA (RESOLUME)";
+        statusBgLayer.style.color = "#34d399";
+      } else if (state.isMediaCleared || !state.activeVideoUrl) {
         statusBgLayer.textContent = "LIMPIO";
         statusBgLayer.style.color = "var(--text-muted)";
       } else if (qLen > 0) {
