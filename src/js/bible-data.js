@@ -284,6 +284,9 @@ export function deleteCustomBible(versionId) {
     delete CUSTOM_BIBLES[versionId];
     try {
       localStorage.setItem("propresenter_custom_bibles", JSON.stringify(CUSTOM_BIBLES));
+      if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.savePersistentStorageSnapshot === 'function') {
+        window.electronAPI.savePersistentStorageSnapshot();
+      }
     } catch (e) {
       console.error("Error al actualizar biblias en localStorage:", e);
     }
@@ -350,6 +353,9 @@ export function parseAndAddCustomBible(jsonData, sourceUrl = '') {
 
   try {
     localStorage.setItem("propresenter_custom_bibles", JSON.stringify(CUSTOM_BIBLES));
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.savePersistentStorageSnapshot === 'function') {
+      window.electronAPI.savePersistentStorageSnapshot();
+    }
   } catch (e) {
     console.error("Límite de almacenamiento alcanzado al guardar biblia personalizada:", e);
   }

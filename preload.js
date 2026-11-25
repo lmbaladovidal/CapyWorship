@@ -3,6 +3,55 @@
  */
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+// Hidratar automáticamente localStorage desde la base de datos persistente en disco antes de iniciar la app.
+// Esto garantiza que al actualizar la versión, usar el instalador o abrir el ejecutable portable,
+// jamás se pierdan canciones, biblias, plantillas, carpetas ni configuraciones previas.
+function syncLocalStorageWithDiskOnBoot() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const diskStorage = ipcRenderer.sendSync('load-persistent-storage-sync');
+    if (diskStorage && typeof diskStorage === 'object') {
+      const hasCustomDecksInLocal = Boolean(window.localStorage.getItem('propresenter_decks'));
+      for (const [key, val] of Object.entries(diskStorage)) {
+        if (typeof val !== 'string') continue;
+        const currentVal = window.localStorage.getItem(key);
+        // Si la clave no existe en localStorage (o si localStorage se reinició tras actualizar/cambiar de ruta), restaurarla del disco
+        if (currentVal === null || (!hasCustomDecksInLocal && key.startsWith('propresenter_'))) {
+          window.localStorage.setItem(key, val);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Preload] No se pudo hidratar almacenamiento persistente:', err);
+  }
+}
+
+function pushLocalStorageSnapshotToDisk() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const snapshot = {};
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && (key.startsWith('propresenter_') || key.startsWith('freepresenter_') || key.startsWith('capyworship_'))) {
+        snapshot[key] = window.localStorage.getItem(key);
+      }
+    }
+    if (Object.keys(snapshot).length > 0) {
+      ipcRenderer.send('save-persistent-storage', snapshot);
+    }
+  } catch (_) {}
+}
+
+syncLocalStorageWithDiskOnBoot();
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => {
+    pushLocalStorageSnapshotToDisk();
+  });
+  window.addEventListener('beforeunload', () => {
+    pushLocalStorageSnapshotToDisk();
+  });
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   getPathForFile: (file) => {
@@ -76,6 +125,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('splash-fade-out', handler);
   },
   getAppSettings: () => ipcRenderer.invoke('get-app-settings'),
-  getAudienceServerInfo: () => ipcRenderer.invoke('get-audience-server-info')
+  getAudienceServerInfo: () => ipcRenderer.invoke('get-audience-server-info'),
+  savePersistentStorageSnapshot: () => pushLocalStorageSnapshotToDisk()
 });
 

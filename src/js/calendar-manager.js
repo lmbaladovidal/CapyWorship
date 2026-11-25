@@ -52,6 +52,9 @@ class CalendarManager {
   saveEvents() {
     try {
       localStorage.setItem("propresenter_calendar_events", JSON.stringify(this.events));
+      if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.savePersistentStorageSnapshot === 'function') {
+        window.electronAPI.savePersistentStorageSnapshot();
+      }
     } catch (e) {
       console.error("Error al guardar eventos del calendario:", e);
     }

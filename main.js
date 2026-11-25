@@ -8,6 +8,82 @@ const fs = require('fs');
 const { PresentationImporter, SUPPORTED_EXTENSIONS } = require('./electron/presentation-importer');
 const { LocalAudienceServer, loadAppSettings } = require('./electron/local-audience-server');
 
+// Unificar siempre la carpeta userData en "%APPDATA%/propresenter-ai-studio" para que actualizaciones,
+// ejecutables portables y versiones instaladas compartan y conserven el 100% de canciones, biblias y medios.
+const UNIFIED_USER_DATA_DIR = path.join(app.getPath('appData'), 'propresenter-ai-studio');
+try {
+  if (!fs.existsSync(UNIFIED_USER_DATA_DIR)) {
+    fs.mkdirSync(UNIFIED_USER_DATA_DIR, { recursive: true });
+  }
+  app.setPath('userData', UNIFIED_USER_DATA_DIR);
+} catch (err) {
+  console.warn('[UserData] No se pudo fijar ruta unificada de userData:', err.message);
+}
+
+function getPersistentDbPaths() {
+  const paths = [path.join(app.getPath('userData'), 'capyworship-database.json')];
+  try {
+    const docsDir = path.join(app.getPath('documents'), 'CapyWorship');
+    paths.push(path.join(docsDir, 'capyworship-database-backup.json'));
+  } catch (_) {}
+  return paths;
+}
+
+function loadPersistentStorageFromDisk() {
+  const candidates = getPersistentDbPaths();
+  for (const filePath of candidates) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && parsed.storage && typeof parsed.storage === 'object') {
+          return parsed.storage;
+        }
+      }
+    } catch (err) {
+      console.warn('[PersistentDB] Error leyendo respaldo en disco:', filePath, err.message);
+    }
+  }
+  return null;
+}
+
+let savePersistentDbTimer = null;
+let pendingPersistentStorage = null;
+
+function flushPersistentStorageToDisk(storageSnapshot) {
+  const payloadObj = storageSnapshot || pendingPersistentStorage;
+  if (!payloadObj || typeof payloadObj !== 'object') return false;
+  pendingPersistentStorage = null;
+  const serialized = JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    version: app.getVersion(),
+    storage: payloadObj
+  }, null, 2);
+
+  for (const filePath of getPersistentDbPaths()) {
+    try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, serialized, 'utf8');
+    } catch (err) {
+      console.warn('[PersistentDB] No se pudo escribir respaldo en:', filePath, err.message);
+    }
+  }
+  return true;
+}
+
+function scheduleSavePersistentStorage(storageSnapshot) {
+  if (!storageSnapshot || typeof storageSnapshot !== 'object') return;
+  pendingPersistentStorage = storageSnapshot;
+  if (savePersistentDbTimer) clearTimeout(savePersistentDbTimer);
+  savePersistentDbTimer = setTimeout(() => {
+    savePersistentDbTimer = null;
+    flushPersistentStorageToDisk();
+  }, 350);
+}
+
 let presentationImporter = null;
 function getPresentationImporter() {
   if (!presentationImporter) {
@@ -775,6 +851,14 @@ ipcMain.on('broadcast-update', (event, state) => {
 ipcMain.handle('get-app-settings', () => appSettings);
 ipcMain.handle('get-audience-server-info', () => (localAudienceServer ? localAudienceServer.getInfo() : null));
 
+// Respaldo Persistente en Disco (Protección Total ante Actualizaciones o Reinstalaciones)
+ipcMain.on('load-persistent-storage-sync', (event) => {
+  event.returnValue = loadPersistentStorageFromDisk();
+});
+ipcMain.on('save-persistent-storage', (_event, storageSnapshot) => {
+  scheduleSavePersistentStorage(storageSnapshot);
+});
+
 // Splash Banner Startup IPC
 ipcMain.on('splash-status', (_event, payload) => {
   if (payload && payload.message) {
@@ -825,6 +909,13 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  if (savePersistentDbTimer) {
+    clearTimeout(savePersistentDbTimer);
+    savePersistentDbTimer = null;
+  }
+  if (pendingPersistentStorage) {
+    flushPersistentStorageToDisk();
+  }
   if (localAudienceServer) {
     localAudienceServer.stop();
   }

@@ -590,6 +590,10 @@ export class Store {
     setStorageItem("propresenter_force_transparent_bg", String(!!this.state.forceTransparentBackground));
     setStorageItem("freepresenter_videowall_image_mode", this.state.videowallImageMode || "sticky");
 
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.savePersistentStorageSnapshot === 'function') {
+      window.electronAPI.savePersistentStorageSnapshot();
+    }
+
     // Transmit lightweight projection state to Audience and Stage displays via Broadcast & IPC
     sync.sendUpdate(this.getProjectionPayload());
   }
