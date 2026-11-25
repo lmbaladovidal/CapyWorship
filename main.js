@@ -196,23 +196,54 @@ function createMainWindow() {
   });
 }
 
-function openAudienceWindow() {
+function resolveAudienceTargetDisplay(displayId) {
+  const displays = screen.getAllDisplays();
+  const primaryDisplay = screen.getPrimaryDisplay();
+
+  if (displayId !== undefined && displayId !== null && displayId !== '') {
+    const byId = displays.find(d => String(d.id) === String(displayId));
+    if (byId) return byId;
+
+    const parsedIndex = Number(displayId);
+    if (Number.isInteger(parsedIndex) && parsedIndex >= 1 && parsedIndex <= displays.length) {
+      return displays[parsedIndex - 1];
+    }
+  }
+
+  return displays.find(d => d.id !== primaryDisplay.id) || displays[0];
+}
+
+function openAudienceWindow(displayId) {
+  const targetDisplay = resolveAudienceTargetDisplay(displayId);
+
   if (audienceWindow && !audienceWindow.isDestroyed()) {
+    if (targetDisplay && displayId !== undefined && displayId !== null && displayId !== '') {
+      try {
+        audienceWindow.setFullScreen(false);
+        audienceWindow.setBounds({
+          x: targetDisplay.bounds.x,
+          y: targetDisplay.bounds.y,
+          width: targetDisplay.bounds.width,
+          height: targetDisplay.bounds.height
+        });
+        audienceWindow.setFullScreen(true);
+      } catch (e) {}
+    }
     audienceWindow.focus();
-    return;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('audience-status-changed', true);
+    }
+    return true;
   }
 
   const displays = screen.getAllDisplays();
-  const primaryDisplay = screen.getPrimaryDisplay();
-  // Target secondary display if available, otherwise display 1
-  const secondaryDisplay = displays.find(d => d.id !== primaryDisplay.id) || displays[0];
 
   audienceWindow = new BrowserWindow({
-    x: secondaryDisplay.bounds.x,
-    y: secondaryDisplay.bounds.y,
-    width: secondaryDisplay.bounds.width,
-    height: secondaryDisplay.bounds.height,
-    fullscreen: displays.length > 1, // Auto-fullscreen on secondary screen
+    x: targetDisplay.bounds.x,
+    y: targetDisplay.bounds.y,
+    width: targetDisplay.bounds.width,
+    height: targetDisplay.bounds.height,
+    fullscreen: displays.length > 1 || Boolean(displayId),
     frame: false,
     autoHideMenuBar: true,
     title: "CapyWorship - Salida Audiencia (OBS / Proyector)",
@@ -227,9 +258,17 @@ function openAudienceWindow() {
 
   audienceWindow.maximize();
 
+  audienceWindow.webContents.on('did-finish-load', () => {
+    if (lastBroadcastState && audienceWindow && !audienceWindow.isDestroyed()) {
+      audienceWindow.webContents.send('broadcast-update', lastBroadcastState);
+    }
+  });
+
   if (isDev) {
     audienceWindow.loadURL(`${DEV_URL}/audience.html`).catch(() => {
-      audienceWindow.loadFile(path.join(__dirname, 'dist/audience.html'));
+      if (audienceWindow && !audienceWindow.isDestroyed()) {
+        audienceWindow.loadFile(path.join(__dirname, 'dist/audience.html'));
+      }
     });
   } else {
     audienceWindow.loadFile(path.join(__dirname, 'dist/audience.html'));
@@ -245,6 +284,16 @@ function openAudienceWindow() {
       mainWindow.webContents.send('audience-status-changed', false);
     }
   });
+
+  return true;
+}
+
+function closeAudienceWindow() {
+  if (audienceWindow && !audienceWindow.isDestroyed()) {
+    audienceWindow.close();
+  }
+  audienceWindow = null;
+  return false;
 }
 
 
@@ -388,7 +437,10 @@ function closeVideowallWindow() {
 }
 
 // Electron IPC Events Handling
-ipcMain.on('open-audience-window', () => openAudienceWindow());
+ipcMain.on('open-audience-window', (_event, displayId) => openAudienceWindow(displayId));
+ipcMain.handle('open-audience-window', (_event, displayId) => openAudienceWindow(displayId));
+ipcMain.on('close-audience-window', () => closeAudienceWindow());
+ipcMain.handle('close-audience-window', () => closeAudienceWindow());
 ipcMain.on('open-stage-window', () => openStageWindow());
 ipcMain.handle('is-audience-open', () => !!(audienceWindow && !audienceWindow.isDestroyed()));
 

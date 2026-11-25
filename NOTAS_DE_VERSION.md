@@ -23,6 +23,10 @@ Para evitar que las placas, flyers o anuncios diseñados en formato horizontal s
 3. **`Negro (Fade out)` (`black`):** Realiza un fundido suave (`transition: opacity 0.5s ease`) a negro puro (`#000000`) y pausa el video al concluir la transición.
 - **Cambio en Vivo y Prioridad de Blackout:** Cambiar de modo en el selector actualiza `videowall.html` al instante sin necesidad de cambiar de diapositiva. El botón **CLEAR ALL (Blackout)** o **Clear Media (F3)** tiene siempre prioridad absoluta y lleva el Videowall a negro puro (`#000000`) en cualquiera de los 3 modos.
 
+#### 🎚️ Módulo "Stage" — Reproductor Dual Sincronizado con Selector de Monitor por Salida
+- **Dos Docks Verticales (Salida 1 Principal + Salida 2 Videowall):** Al activar la pestaña superior **`Stage`**, se despliega una estación con dos docks independientes que aceptan **tanto videos como imágenes**, cada uno con su propio selector **`Enviar a: [Monitor X]`** sincronizado con la barra superior.
+- **Cola Numerada (`Alt + Click`) y Disparo Simultáneo:** Permite seleccionar qué imagen o video (o cola numerada `1, 2, 3...` con `Alt + Click` y auto-avance al terminar cada clip) va al monitor de **Audiencia** y qué imagen o video acompañante va al monitor de **Videowall**, enviando ambos en simultáneo con el botón **"Enviar a pantallas"**.
+
 #### 🦫 Repositorio Oficial CapyWorship
 - El repositorio y el paquete de distribución pasan a llamarse oficialmente **CapyWorship** (`https://github.com/lmbaladovidal/CapyWorship.git`).
 

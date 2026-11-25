@@ -206,6 +206,10 @@
     let lastMediaCommandId = null;
     let isBackgroundForceHidden = isForceTransparentByUrl;
     let mediaOperationToken = 0;
+    let isStageMediaActive = false;
+    let currentStageSyncTimestamp = 0;
+    let currentStageMainSrc = "";
+    let currentStageQueueIdx = -1;
 
     const getActiveAudienceVideo = () => {
       const candidate = activeMediaLayer === 'A' ? bgVideoA : bgVideoB;
@@ -238,6 +242,13 @@
         activeVid.pause();
       } else if (cmd.action === 'play') {
         activeVid.play().catch(() => { });
+      } else if (cmd.action === 'stop') {
+        try {
+          activeVid.pause();
+          activeVid.currentTime = 0;
+        } catch (e) { }
+        bgVideoA.style.opacity = '0';
+        bgVideoB.style.opacity = '0';
       }
     };
 
@@ -246,8 +257,8 @@
     });
 
     const handleVideoEnded = (videoEl) => {
-      if (videoEl.style.opacity === '1' && hasQueuedMedia) {
-        sync.notifyMediaEnded(currentVideoUrl);
+      if (videoEl.style.opacity === '1' && (hasQueuedMedia || isStageMediaActive)) {
+        sync.notifyMediaEnded(isStageMediaActive ? currentStageMainSrc : currentVideoUrl);
       }
     };
     bgVideoA.addEventListener('ended', () => handleVideoEnded(bgVideoA));
@@ -255,6 +266,142 @@
 
     sync.onUpdate((state) => {
       isBackgroundForceHidden = isForceTransparentByUrl || Boolean(state.forceTransparentBackground);
+
+      // MODO STAGE: Reproductor Dual Sincronizado (prioridad sobre shows, letras, placas y fondos)
+      const stageMedia = (state && state.stageMedia && state.stageMedia.active) ? state.stageMedia : null;
+      if (stageMedia) {
+        isStageMediaActive = true;
+        currentVideoUrl = "";
+        currentMediaPlayId = 0;
+
+        // Ocultar textos, letras, placas y overlays habituales
+        if (fadeTimeout) clearTimeout(fadeTimeout);
+        textEl.classList.add('cleared');
+        textEl.style.opacity = '0';
+        currentLiveText = "";
+        slideImgA.style.opacity = '0';
+        slideImgB.style.opacity = '0';
+        currentSlideImageUrl = "";
+        ltBanner.classList.remove('active');
+        bgImgA.style.opacity = '0';
+        bgImgB.style.opacity = '0';
+        bgImgA.style.display = 'none';
+        bgImgB.style.display = 'none';
+
+        const isAudioMuted = !!state.isMediaAudioMuted;
+        const audioVolume = typeof state.mediaAudioVolume === 'number' ? state.mediaAudioVolume : 1.0;
+        const playbackRate = typeof state.mediaPlaybackRate === 'number'
+          ? Math.max(0.25, Math.min(2.0, state.mediaPlaybackRate))
+          : 1.0;
+
+        bgVideoA.muted = isAudioMuted;
+        bgVideoB.muted = isAudioMuted;
+        bgVideoA.volume = audioVolume;
+        bgVideoB.volume = audioVolume;
+        bgVideoA.playbackRate = playbackRate;
+        bgVideoB.playbackRate = playbackRate;
+        bgVideoA.loop = false;
+        bgVideoB.loop = false;
+
+        const mainSrc = stageMedia.mainVideo && typeof stageMedia.mainVideo.src === 'string'
+          ? stageMedia.mainVideo.src
+          : "";
+        const mainIsImage = Boolean(
+          stageMedia.mainVideo?.isImage ||
+          (stageMedia.mainVideo?.type && stageMedia.mainVideo.type.startsWith('image/')) ||
+          (mainSrc && (mainSrc.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i) || mainSrc.startsWith('data:image/')))
+        );
+        const incomingQueueIdx = typeof stageMedia.queueIndex === 'number' ? stageMedia.queueIndex : -1;
+
+        if (!mainSrc) {
+          // Fin de la cola o sin medio principal activo -> pantalla principal en negro limpio
+          mediaOperationToken++;
+          bgVideoA.style.transition = 'opacity 250ms ease-in-out';
+          bgVideoB.style.transition = 'opacity 250ms ease-in-out';
+          bgImgA.style.transition = 'opacity 250ms ease-in-out';
+          bgImgB.style.transition = 'opacity 250ms ease-in-out';
+          bgVideoA.style.opacity = '0';
+          bgVideoB.style.opacity = '0';
+          bgImgA.style.opacity = '0';
+          bgImgB.style.opacity = '0';
+          bgVideoA.pause();
+          bgVideoB.pause();
+          currentStageMainSrc = "";
+        } else if (
+          stageMedia.syncTimestamp !== currentStageSyncTimestamp ||
+          mainSrc !== currentStageMainSrc ||
+          incomingQueueIdx !== currentStageQueueIdx
+        ) {
+          const opToken = ++mediaOperationToken;
+          if (window.audienceClearVramTimeout) {
+            clearTimeout(window.audienceClearVramTimeout);
+            window.audienceClearVramTimeout = null;
+          }
+          currentStageSyncTimestamp = stageMedia.syncTimestamp || 0;
+          currentStageMainSrc = mainSrc;
+          currentStageQueueIdx = incomingQueueIdx;
+
+          const incomingMedia = activeMediaLayer === 'A' ? { video: bgVideoB, img: bgImgB } : { video: bgVideoA, img: bgImgA };
+          const outgoingMedia = activeMediaLayer === 'A' ? { video: bgVideoA, img: bgImgA } : { video: bgVideoB, img: bgImgB };
+          activeMediaLayer = activeMediaLayer === 'A' ? 'B' : 'A';
+
+          outgoingMedia.video.pause();
+          outgoingMedia.video.style.opacity = '0';
+          outgoingMedia.img.style.opacity = '0';
+
+          if (mainIsImage) {
+            incomingMedia.video.pause();
+            incomingMedia.video.style.opacity = '0';
+            incomingMedia.video.style.display = 'none';
+            incomingMedia.img.src = mainSrc;
+            incomingMedia.img.style.display = 'block';
+            incomingMedia.img.style.transition = 'none';
+            void incomingMedia.img.offsetWidth;
+            incomingMedia.img.style.opacity = '1';
+          } else {
+            incomingMedia.img.style.opacity = '0';
+            incomingMedia.img.style.display = 'none';
+            const incomingVideo = incomingMedia.video;
+            incomingVideo.src = mainSrc;
+            incomingVideo.currentTime = 0;
+            incomingVideo.loop = false;
+            incomingVideo.muted = isAudioMuted;
+            incomingVideo.volume = audioVolume;
+            incomingVideo.playbackRate = playbackRate;
+            incomingVideo.style.display = 'block';
+            incomingVideo.style.transition = 'none';
+            void incomingVideo.offsetWidth;
+            incomingVideo.style.opacity = '1';
+
+            if (state.isMediaPaused) {
+              incomingVideo.pause();
+            } else {
+              const playPromise = incomingVideo.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(() => {
+                  if (opToken !== mediaOperationToken) return;
+                  incomingVideo.muted = true;
+                  incomingVideo.play().catch(() => {});
+                });
+              }
+            }
+          }
+        }
+
+        if (state.mediaPlaybackCommand) {
+          executeAudienceMediaCommand(state.mediaPlaybackCommand);
+        }
+        return;
+      }
+
+      if (isStageMediaActive) {
+        isStageMediaActive = false;
+        currentStageSyncTimestamp = 0;
+        currentStageMainSrc = "";
+        currentStageQueueIdx = -1;
+        currentVideoUrl = "";
+        currentMediaPlayId = 0;
+      }
 
       // 0. Active Template Typography & Layout Styles
       if (state.activeTemplate) {

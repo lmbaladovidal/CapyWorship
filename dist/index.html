@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CapyWorship — Tech for the Kingdom</title>
   <link rel="icon" type="image/png" href="./icon.png" />
-  <script type="module" crossorigin src="./assets/main-NDStvo31.js"></script>
+  <script type="module" crossorigin src="./assets/main-BmiDfokR.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/broadcast-DCzxmwYx.js">
-  <link rel="stylesheet" crossorigin href="./assets/main-Bm2njC3R.css">
+  <link rel="stylesheet" crossorigin href="./assets/main-DbbucXhu.css">
 </head>
 <body>
   <div id="app">
@@ -48,7 +48,7 @@
           <span>Edit</span>
         </button>
 
-        <button class="mode-tab" data-mode="stage" title="Configurador de Monitor de Orador">
+        <button class="mode-tab" data-mode="stage" title="Reproductor Dual Sincronizado (Pantalla Principal + Videowall)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="4" y="4" width="16" height="16" rx="2"></rect>
             <rect x="9" y="9" width="6" height="6"></rect>
@@ -60,14 +60,20 @@
       <!-- Right Section: Quick Launchers & Settings -->
       <div class="header-right">
         <div class="output-launchers">
-          <button id="btn-open-audience" class="btn-output" title="Abrir ventana de Proyección o Señal OBS">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-              <line x1="8" y1="21" x2="16" y2="21"></line>
-              <line x1="12" y1="17" x2="12" y2="21"></line>
-            </svg>
-            <span>Audiencia</span>
-          </button>
+          <div class="videowall-output-group audience-output-group" title="Salida Principal de Audiencia (Videos + Letras / Placas)">
+            <select id="select-audience-display" class="select-videowall-display" title="Seleccionar monitor físico para Salida Principal (Audiencia)">
+              <option value="">Monitor 2 (Audiencia)</option>
+            </select>
+            <button id="btn-open-audience" class="btn-output btn-audience-toggle" title="Abrir / Mover ventana de Audiencia en el monitor elegido">
+              <span id="audience-status-dot" class="videowall-status-dot" aria-hidden="true"></span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+              <span id="lbl-toggle-audience">Audiencia</span>
+            </button>
+          </div>
 
           <button id="btn-open-stage" class="btn-output" title="Abrir pantalla de monitoreo para oradores/músicos">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -173,6 +179,103 @@
         </div>
       </section>
 
+      <!-- Vista Módulo Stage: Reproductor Dual Sincronizado (Pantalla Principal + Videowall) -->
+      <section id="view-stage-dual" class="stage-dual-view" style="display: none;">
+        <!-- 1. Dock Superior: Videos / Imágenes Pantalla Principal (audience.html) -->
+        <div id="stage-dock-main" class="stage-dock stage-dock-upper">
+          <div class="stage-dock-header">
+            <div class="stage-dock-title-group">
+              <span class="stage-dock-badge badge-stage-main"><i data-lucide="tv"></i> SALIDA 1 — PANTALLA PRINCIPAL (AUDIENCIA)</span>
+              <div class="stage-monitor-target-pill" title="Elige a qué monitor físico se enviará el video o imagen de este dock">
+                <span class="stage-monitor-target-label"><i data-lucide="monitor"></i> Enviar a:</span>
+                <select id="select-stage-main-display" class="select-stage-dock-display" title="Monitor de destino para el Dock Superior (Pantalla Principal)">
+                  <option value="">Monitor 2</option>
+                </select>
+              </div>
+              <span class="stage-dock-hint">
+                <strong>Clic:</strong> Selección única • <strong>Alt + Click:</strong> Armar cola (1, 2, 3...)
+              </span>
+            </div>
+            <div class="stage-dock-actions">
+              <button type="button" id="btn-stage-copy-from-media-main" class="btn-output btn-stage-import-sec" title="Traer videos e imágenes de la Galería Media hacia este dock">
+                <i data-lucide="folder-input"></i>
+                <span>Traer de Media</span>
+              </button>
+              <button type="button" id="btn-stage-add-main-video" class="btn-create-show-dock btn-stage-import-main" title="Importar videos o imágenes para enviar al monitor de Pantalla Principal">
+                <i data-lucide="plus"></i>
+                <span>Importar Video / Imagen</span>
+              </button>
+              <input type="file" id="input-stage-main-files" accept="video/*,image/*" multiple style="display: none;" />
+            </div>
+          </div>
+          <div id="stage-main-grid" class="stage-video-grid">
+            <!-- Dynamically populated main video/image cards -->
+          </div>
+        </div>
+
+        <!-- Barra de Acción Central del Módulo Stage -->
+        <div class="stage-dual-action-bar">
+          <div class="stage-selection-summary" id="stage-selection-summary">
+            <div class="stage-summary-item">
+              <span id="lbl-stage-target-main" class="stage-summary-label">Principal (Monitor 2):</span>
+              <strong id="lbl-stage-summary-main" class="stage-summary-val">Sin selección</strong>
+            </div>
+            <span class="stage-summary-sep">➔</span>
+            <div class="stage-summary-item">
+              <span id="lbl-stage-target-secondary" class="stage-summary-label">Secundaria (Monitor 3):</span>
+              <strong id="lbl-stage-summary-secondary" class="stage-summary-val">Sin selección</strong>
+            </div>
+            <span id="badge-stage-live-status" class="stage-live-status-pill" style="display: none;">EN REPRODUCCIÓN</span>
+          </div>
+          <div class="stage-action-buttons">
+            <button type="button" id="btn-stage-clear-selection" class="btn-output btn-stage-clear" title="Resetear selección de ambos docks y vaciar la cola">
+              <i data-lucide="rotate-ccw"></i>
+              <span>Limpiar selección / Cola</span>
+            </button>
+            <button type="button" id="btn-stage-stop-playback" class="btn-output btn-stage-stop" style="display: none;" title="Detener reproducción dual de Stage">
+              <i data-lucide="square"></i>
+              <span>Detener Stage</span>
+            </button>
+            <button type="button" id="btn-stage-send-screens" class="btn-stage-send" disabled title="Selecciona al menos 1 video/imagen en el Dock Superior y 1 video/imagen en el Dock Inferior para habilitar">
+              <i data-lucide="play"></i>
+              <span>Enviar a pantallas</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Dock Inferior: Videos / Imágenes Pantalla Secundaria (videowall.html) -->
+        <div id="stage-dock-secondary" class="stage-dock stage-dock-lower">
+          <div class="stage-dock-header">
+            <div class="stage-dock-title-group">
+              <span class="stage-dock-badge badge-stage-secondary"><i data-lucide="film"></i> SALIDA 2 — PANTALLA SECUNDARIA (VIDEOWALL)</span>
+              <div class="stage-monitor-target-pill stage-monitor-target-secondary" title="Elige a qué monitor físico se enviará el video o imagen de este dock">
+                <span class="stage-monitor-target-label"><i data-lucide="monitor"></i> Enviar a:</span>
+                <select id="select-stage-secondary-display" class="select-stage-dock-display" title="Monitor de destino para el Dock Inferior (Videowall)">
+                  <option value="">Monitor 3</option>
+                </select>
+              </div>
+              <span class="stage-dock-hint">
+                <strong>Clic:</strong> Seleccionar video o imagen acompañante para este monitor
+              </span>
+            </div>
+            <div class="stage-dock-actions">
+              <button type="button" id="btn-stage-copy-from-media-secondary" class="btn-output btn-stage-import-sec" title="Traer videos e imágenes de la Galería Media hacia este dock">
+                <i data-lucide="folder-input"></i>
+                <span>Traer de Media</span>
+              </button>
+              <button type="button" id="btn-stage-add-secondary-video" class="btn-create-show-dock btn-stage-import-videowall" title="Importar videos o imágenes para enviar al monitor de Videowall">
+                <i data-lucide="plus"></i>
+                <span>Importar Video / Imagen</span>
+              </button>
+              <input type="file" id="input-stage-secondary-files" accept="video/*,image/*" multiple style="display: none;" />
+            </div>
+          </div>
+          <div id="stage-secondary-grid" class="stage-video-grid">
+            <!-- Dynamically populated secondary video/image cards -->
+          </div>
+        </div>
+      </section>
+
       <!-- Right Column: Operator Controls, Transitions, Timers & Stage Display -->
       <aside class="right-sidebar">
         <!-- Live Output Preview Monitor Box -->
@@ -230,6 +333,9 @@
             <div class="media-timeline-controls">
               <button type="button" id="btn-timeline-play-pause" class="btn-timeline-ctrl" title="Pausar / Reanudar medio en reproducción">
                 <span id="icon-timeline-play-pause" style="display: inline-flex; align-items: center; justify-content: center;"><i data-lucide="pause"></i></span>
+              </button>
+              <button type="button" id="btn-timeline-stop" class="btn-timeline-ctrl" title="Detener reproducción">
+                <i data-lucide="square"></i>
               </button>
               <button type="button" id="btn-timeline-restart" class="btn-timeline-ctrl" title="Reiniciar video desde 00:00">
                 <i data-lucide="rotate-ccw"></i>

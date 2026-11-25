@@ -184,6 +184,21 @@ class LocalAudienceServer {
         return restEntry;
       });
     }
+    if (lightState.stageMedia && typeof lightState.stageMedia === 'object') {
+      lightState.stageMedia = { ...lightState.stageMedia };
+      if (lightState.stageMedia.mainVideo && typeof lightState.stageMedia.mainVideo === 'object') {
+        lightState.stageMedia.mainVideo = { ...lightState.stageMedia.mainVideo };
+        if (typeof lightState.stageMedia.mainVideo.src === 'string' && lightState.stageMedia.mainVideo.src.startsWith('file:')) {
+          lightState.stageMedia.mainVideo.src = this.registerLocalMediaUrl(lightState.stageMedia.mainVideo.src);
+        }
+      }
+      if (lightState.stageMedia.secondaryVideo && typeof lightState.stageMedia.secondaryVideo === 'object') {
+        lightState.stageMedia.secondaryVideo = { ...lightState.stageMedia.secondaryVideo };
+        if (typeof lightState.stageMedia.secondaryVideo.src === 'string' && lightState.stageMedia.secondaryVideo.src.startsWith('file:')) {
+          lightState.stageMedia.secondaryVideo.src = this.registerLocalMediaUrl(lightState.stageMedia.secondaryVideo.src);
+        }
+      }
+    }
 
     return lightState;
   }

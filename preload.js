@@ -13,7 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     } catch (e) {}
     return file?.path || '';
   },
-  openAudienceWindow: () => ipcRenderer.send('open-audience-window'),
+  openAudienceWindow: (displayId) => ipcRenderer.invoke('open-audience-window', displayId),
+  closeAudienceWindow: () => ipcRenderer.invoke('close-audience-window'),
   openStageWindow: () => ipcRenderer.send('open-stage-window'),
   focusMainWindow: () => ipcRenderer.send('focus-main-window'),
   selectMediaFiles: () => ipcRenderer.invoke('select-media-files'),

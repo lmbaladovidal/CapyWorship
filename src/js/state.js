@@ -396,6 +396,8 @@ export class Store {
     const savedFolders = getStorageItem("propresenter_media_folders");
     const savedPhysicalFolders = getStorageItem("propresenter_physical_media_folders");
     const savedMediaQueue = getStorageItem("propresenter_media_queue");
+    const savedStageMainLib = getStorageItem("propresenter_stage_main_library");
+    const savedStageSecLib = getStorageItem("propresenter_stage_secondary_library");
 
     this.state = {
       // Proyección Live
@@ -474,34 +476,57 @@ export class Store {
       // Stage & Timers
       stageMessage: "",
       timerValue: 600,
-      timerRunning: false
+      timerRunning: false,
+
+      // Stage Dual Video Player Module (Main Screen + Videowall)
+      stageMainLibrary: savedStageMainLib ? JSON.parse(savedStageMainLib) : [],
+      stageSecondaryLibrary: savedStageSecLib ? JSON.parse(savedStageSecLib) : [],
+      stageMainSelectedId: null,
+      stageMainQueue: [],
+      stageSecondarySelectedId: null,
+      stageActiveQueueIndex: -1,
+      stageQueueFinished: false,
+      stageMedia: {
+        active: false,
+        syncTimestamp: 0,
+        mainVideo: null,
+        secondaryVideo: null
+      }
     };
 
     this.listeners = [];
 
     // Auto-hidratar miniaturas y restaurar blobs persistentes desde IndexedDB
-    if (typeof window !== 'undefined' && Array.isArray(this.state.mediaLibrary)) {
-      this.state.mediaLibrary.forEach(item => {
-        if (!item.thumbnail && item.id) {
-          MediaCache.getThumbnail(item.id).then(t => {
-            if (t) {
-              item.thumbnail = t;
-              this.notify();
-            }
-          }).catch(() => { });
-        }
-        if (item.url && item.url.startsWith('blob:')) {
-          if (item.filePath) {
-            item.url = 'file:///' + item.filePath.replace(/\\/g, '/');
-          } else {
-            MediaCache.getBlob(item.id).then(blob => {
-              if (blob) {
-                item.url = URL.createObjectURL(blob);
+    const allMediaCollections = [
+      this.state.mediaLibrary,
+      this.state.stageMainLibrary,
+      this.state.stageSecondaryLibrary
+    ];
+    if (typeof window !== 'undefined') {
+      allMediaCollections.forEach(collection => {
+        if (!Array.isArray(collection)) return;
+        collection.forEach(item => {
+          if (!item.thumbnail && item.id) {
+            MediaCache.getThumbnail(item.id).then(t => {
+              if (t) {
+                item.thumbnail = t;
                 this.notify();
               }
             }).catch(() => { });
           }
-        }
+          if (item.url && item.url.startsWith('blob:')) {
+            if (item.filePath) {
+              item.url = 'file:///' + item.filePath.replace(/\\/g, '/');
+            } else {
+              MediaCache.getBlob(item.id).then(blob => {
+                if (blob) {
+                  item.url = URL.createObjectURL(blob);
+                  this.notify();
+                }
+              }).catch(() => { });
+            }
+          }
+        });
       });
     }
 
@@ -521,7 +546,14 @@ export class Store {
   }
 
   getProjectionPayload() {
-    const { mediaLibrary, mediaFolders, physicalMediaFolders, ...projectionState } = this.state;
+    const {
+      mediaLibrary,
+      mediaFolders,
+      physicalMediaFolders,
+      stageMainLibrary,
+      stageSecondaryLibrary,
+      ...projectionState
+    } = this.state;
     return projectionState;
   }
 
@@ -532,9 +564,17 @@ export class Store {
     const lightMediaLib = Array.isArray(this.state.mediaLibrary)
       ? this.state.mediaLibrary.map(({ thumbnail, ...rest }) => rest)
       : [];
+    const lightStageMainLib = Array.isArray(this.state.stageMainLibrary)
+      ? this.state.stageMainLibrary.map(({ thumbnail, ...rest }) => rest)
+      : [];
+    const lightStageSecLib = Array.isArray(this.state.stageSecondaryLibrary)
+      ? this.state.stageSecondaryLibrary.map(({ thumbnail, ...rest }) => rest)
+      : [];
 
     setStorageItem("propresenter_decks", JSON.stringify(this.decks));
     setStorageItem("propresenter_media_library", JSON.stringify(lightMediaLib));
+    setStorageItem("propresenter_stage_main_library", JSON.stringify(lightStageMainLib));
+    setStorageItem("propresenter_stage_secondary_library", JSON.stringify(lightStageSecLib));
     setStorageItem("propresenter_media_folders", JSON.stringify(this.state.mediaFolders));
     setStorageItem("propresenter_physical_media_folders", JSON.stringify(this.state.physicalMediaFolders || []));
     setStorageItem("propresenter_media_queue", JSON.stringify(this.state.mediaQueue || []));
@@ -838,6 +878,7 @@ export class Store {
   }
 
   setLiveScripture(text) {
+    this.deactivateStageMedia(false);
     this.state.liveContentType = "scripture";
     this.state.liveText = text;
     this.state.liveSlideImage = "";
@@ -861,6 +902,8 @@ export class Store {
     const group = deck.groups[groupIndex];
     const slide = group.slides[slideIndex];
     if (!slide) return;
+
+    this.deactivateStageMedia(false);
 
     if (slide.isLowerThird) {
       const parts = slide.text.split("\n");
@@ -898,6 +941,7 @@ export class Store {
 
   // Master Clear Functions
   clearAll() {
+    this.deactivateStageMedia(false);
     this.state.isTextCleared = true;
     this.state.isMediaCleared = true;
     this.state.isOverlayCleared = true;
@@ -920,6 +964,7 @@ export class Store {
   }
 
   clearMedia() {
+    this.deactivateStageMedia(false);
     this.state.isMediaCleared = true;
     this.state.isMediaPaused = false;
     this.notify();
@@ -1698,14 +1743,22 @@ export class Store {
   hydrateMediaThumbnailsBatch(thumbMap) {
     if (!thumbMap || !(thumbMap instanceof Map) || thumbMap.size === 0) return 0;
     let updatedCount = 0;
-    this.state.mediaLibrary.forEach(item => {
-      if (item.thumbnail) return;
-      const stableKey = item.filePath || item.url || '';
-      const cached = thumbMap.get(item.id) || (stableKey ? thumbMap.get(stableKey) : null);
-      if (cached) {
-        item.thumbnail = cached;
-        updatedCount++;
-      }
+    const collections = [
+      this.state.mediaLibrary,
+      this.state.stageMainLibrary,
+      this.state.stageSecondaryLibrary
+    ];
+    collections.forEach(list => {
+      if (!Array.isArray(list)) return;
+      list.forEach(item => {
+        if (item.thumbnail) return;
+        const stableKey = item.filePath || item.url || '';
+        const cached = thumbMap.get(item.id) || (stableKey ? thumbMap.get(stableKey) : null);
+        if (cached) {
+          item.thumbnail = cached;
+          updatedCount++;
+        }
+      });
     });
     if (updatedCount > 0) {
       this.listeners.forEach(fn => fn(this.state, this.decks));
@@ -1740,6 +1793,7 @@ export class Store {
   }
 
   setActiveVideo(url, name = "", type = "") {
+    this.deactivateStageMedia(false);
     this.state.activeVideoUrl = url;
     this.state.activeVideoName = name || this.state.mediaLibrary.find(m => m.url === url)?.name || "Fondo Multimedia";
     this.state.activeVideoTitle = this.state.activeVideoName;
@@ -1880,6 +1934,310 @@ export class Store {
     const [targetItem] = this.state.mediaQueue.splice(idx, 1);
     this.setActiveVideo(targetItem.url, targetItem.name, targetItem.type);
     return targetItem;
+  }
+
+  // =========================================================================
+  // MÓDULO STAGE: REPRODUCTOR DUAL SINCRONIZADO (PANTALLA PRINCIPAL + VIDEOWALL)
+  // =========================================================================
+
+  addStageMediaBatch(targetDock, items) {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const isSecondary = targetDock === 'secondary';
+    const listKey = isSecondary ? 'stageSecondaryLibrary' : 'stageMainLibrary';
+    if (!Array.isArray(this.state[listKey])) {
+      this.state[listKey] = [];
+    }
+
+    const added = [];
+    items.forEach((item, index) => {
+      if (!item || !item.url) return;
+      // Evitar duplicar por misma ruta o URL dentro del mismo dock
+      const existing = this.state[listKey].find(m =>
+        (item.filePath && m.filePath === item.filePath) || (item.url && m.url === item.url)
+      );
+      if (existing) {
+        added.push(existing);
+        return;
+      }
+      const isImg = Boolean(
+        item.isImage ||
+        (item.type && item.type.startsWith('image/')) ||
+        (item.url && /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(item.url))
+      );
+      const newItem = {
+        id: item.id || (`stage-${isSecondary ? 'sec' : 'main'}-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 4)}`),
+        name: item.name || (isImg ? "Imagen Stage" : "Video Stage"),
+        url: item.url,
+        filePath: item.filePath || "",
+        type: item.type || (isImg ? "image/png" : "video/mp4"),
+        isImage: isImg,
+        duration: typeof item.duration === 'number' ? item.duration : 0,
+        thumbnail: item.thumbnail || ""
+      };
+      this.state[listKey].push(newItem);
+      added.push(newItem);
+    });
+
+    this.notify();
+    return added;
+  }
+
+  updateStageMediaDuration(targetDock, itemId, durationSeconds) {
+    const isSecondary = targetDock === 'secondary';
+    const list = isSecondary ? this.state.stageSecondaryLibrary : this.state.stageMainLibrary;
+    if (!Array.isArray(list)) return;
+    const target = list.find(m => m.id === itemId);
+    if (target && typeof durationSeconds === 'number' && isFinite(durationSeconds) && durationSeconds > 0) {
+      if (Math.abs((target.duration || 0) - durationSeconds) > 0.2) {
+        target.duration = durationSeconds;
+        this.notify();
+      }
+    }
+  }
+
+  deleteStageMediaItem(targetDock, itemId) {
+    const isSecondary = targetDock === 'secondary';
+    const listKey = isSecondary ? 'stageSecondaryLibrary' : 'stageMainLibrary';
+    if (!Array.isArray(this.state[listKey])) return;
+
+    const target = this.state[listKey].find(m => m.id === itemId);
+    if (!target) return;
+
+    this.state[listKey] = this.state[listKey].filter(m => m.id !== itemId);
+
+    if (isSecondary) {
+      if (this.state.stageSecondarySelectedId === itemId) {
+        this.state.stageSecondarySelectedId = null;
+      }
+    } else {
+      if (this.state.stageMainSelectedId === itemId) {
+        this.state.stageMainSelectedId = null;
+      }
+      if (Array.isArray(this.state.stageMainQueue)) {
+        this.state.stageMainQueue = this.state.stageMainQueue.filter(id => id !== itemId);
+      }
+    }
+
+    this.notify();
+  }
+
+  selectStageMainVideo(itemId) {
+    const exists = (this.state.stageMainLibrary || []).some(m => m.id === itemId);
+    if (!exists) return null;
+    // Clic normal: limpia la cola previa y deja ese único video seleccionado
+    this.state.stageMainQueue = [];
+    this.state.stageMainSelectedId = itemId;
+    this.state.stageActiveQueueIndex = -1;
+    this.state.stageQueueFinished = false;
+    this.notify();
+    return itemId;
+  }
+
+  toggleStageMainQueueItem(itemId) {
+    const exists = (this.state.stageMainLibrary || []).some(m => m.id === itemId);
+    if (!exists) return [];
+
+    if (!Array.isArray(this.state.stageMainQueue)) {
+      this.state.stageMainQueue = [];
+    }
+
+    // Si había una selección simple previa y la cola estaba vacía, al hacer Alt+Click pasamos a modo cola
+    this.state.stageMainSelectedId = null;
+    this.state.stageActiveQueueIndex = -1;
+    this.state.stageQueueFinished = false;
+
+    const existingIdx = this.state.stageMainQueue.indexOf(itemId);
+    if (existingIdx !== -1) {
+      // Quitar de la cola y recalcular índices
+      this.state.stageMainQueue.splice(existingIdx, 1);
+    } else {
+      // Agregar al final de la cola
+      this.state.stageMainQueue.push(itemId);
+    }
+
+    this.notify();
+    return [...this.state.stageMainQueue];
+  }
+
+  selectStageSecondaryVideo(itemId) {
+    const exists = (this.state.stageSecondaryLibrary || []).some(m => m.id === itemId);
+    if (!exists) return null;
+    this.state.stageSecondarySelectedId = itemId;
+    this.notify();
+    return itemId;
+  }
+
+  clearStageSelections() {
+    this.state.stageMainSelectedId = null;
+    this.state.stageMainQueue = [];
+    this.state.stageSecondarySelectedId = null;
+    this.state.stageActiveQueueIndex = -1;
+    this.state.stageQueueFinished = false;
+    this.notify();
+  }
+
+  canDispatchStage() {
+    const mainLib = this.state.stageMainLibrary || [];
+    const secLib = this.state.stageSecondaryLibrary || [];
+    const queue = Array.isArray(this.state.stageMainQueue) ? this.state.stageMainQueue : [];
+
+    const hasValidMain = queue.length > 0
+      ? queue.some(id => mainLib.some(m => m.id === id))
+      : Boolean(this.state.stageMainSelectedId && mainLib.some(m => m.id === this.state.stageMainSelectedId));
+
+    const hasValidSecondary = Boolean(
+      this.state.stageSecondarySelectedId && secLib.some(m => m.id === this.state.stageSecondarySelectedId)
+    );
+
+    return hasValidMain && hasValidSecondary;
+  }
+
+  dispatchStageToScreens() {
+    if (!this.canDispatchStage()) return null;
+
+    const mainLib = this.state.stageMainLibrary || [];
+    const secLib = this.state.stageSecondaryLibrary || [];
+    const queueIds = (this.state.stageMainQueue || []).filter(id => mainLib.some(m => m.id === id));
+
+    let firstMainItem = null;
+    if (queueIds.length > 0) {
+      this.state.stageMainQueue = queueIds;
+      this.state.stageActiveQueueIndex = 0;
+      firstMainItem = mainLib.find(m => m.id === queueIds[0]) || null;
+    } else {
+      this.state.stageActiveQueueIndex = -1;
+      firstMainItem = mainLib.find(m => m.id === this.state.stageMainSelectedId) || null;
+    }
+
+    const secondaryItem = secLib.find(m => m.id === this.state.stageSecondarySelectedId) || null;
+    if (!firstMainItem || !secondaryItem) return null;
+
+    const now = Date.now();
+    this.state.stageQueueFinished = false;
+    this.state.isMediaPaused = false;
+    this.state.mediaPlaybackCommand = null;
+
+    const mainIsImg = Boolean(
+      firstMainItem.isImage ||
+      (firstMainItem.type && firstMainItem.type.startsWith('image/')) ||
+      /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(firstMainItem.url || '')
+    );
+    const secIsImg = Boolean(
+      secondaryItem.isImage ||
+      (secondaryItem.type && secondaryItem.type.startsWith('image/')) ||
+      /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(secondaryItem.url || '')
+    );
+
+    this.state.stageMedia = {
+      active: true,
+      syncTimestamp: now,
+      queueIndex: this.state.stageActiveQueueIndex,
+      queueTotal: queueIds.length,
+      mainVideo: {
+        id: firstMainItem.id,
+        src: firstMainItem.url,
+        name: firstMainItem.name,
+        type: firstMainItem.type || (mainIsImg ? 'image/png' : 'video/mp4'),
+        isImage: mainIsImg
+      },
+      secondaryVideo: {
+        id: secondaryItem.id,
+        src: secondaryItem.url,
+        name: secondaryItem.name,
+        type: secondaryItem.type || (secIsImg ? 'image/png' : 'video/mp4'),
+        isImage: secIsImg,
+        loop: true
+      }
+    };
+
+    this.notify();
+    return this.state.stageMedia;
+  }
+
+  advanceStageMainQueue() {
+    if (!this.state.stageMedia || !this.state.stageMedia.active) return null;
+
+    const mainLib = this.state.stageMainLibrary || [];
+    const queueIds = (this.state.stageMainQueue || []).filter(id => mainLib.some(m => m.id === id));
+
+    if (queueIds.length > 0 && this.state.stageActiveQueueIndex >= 0) {
+      const nextIndex = this.state.stageActiveQueueIndex + 1;
+      if (nextIndex < queueIds.length) {
+        const nextItem = mainLib.find(m => m.id === queueIds[nextIndex]);
+        if (nextItem) {
+          this.state.stageActiveQueueIndex = nextIndex;
+          this.state.isMediaPaused = false;
+          this.state.mediaPlaybackCommand = null;
+          // Importante: conservar syncTimestamp y secondaryVideo intactos para que videowall.html NO reinicie su video
+          const nextIsImg = Boolean(
+            nextItem.isImage ||
+            (nextItem.type && nextItem.type.startsWith('image/')) ||
+            /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(nextItem.url || '')
+          );
+          this.state.stageMedia = {
+            ...this.state.stageMedia,
+            queueIndex: nextIndex,
+            queueTotal: queueIds.length,
+            mainVideo: {
+              id: nextItem.id,
+              src: nextItem.url,
+              name: nextItem.name,
+              type: nextItem.type || (nextIsImg ? 'image/png' : 'video/mp4'),
+              isImage: nextIsImg
+            }
+          };
+          this.notify();
+          return nextItem;
+        }
+      }
+    }
+
+    // Si era el último video de la cola (o selección simple), detener limpiamente la pantalla principal y marcar cola como finalizada
+    this.state.stageQueueFinished = true;
+    this.state.isMediaPaused = false;
+    this.state.mediaPlaybackCommand = null;
+    this.state.stageMedia = {
+      ...this.state.stageMedia,
+      mainVideo: null,
+      mainEnded: true
+    };
+    this.notify();
+    return null;
+  }
+
+  stopStageMedia() {
+    if (!this.state.stageMedia?.active) return;
+    const cmd = {
+      id: "cmd-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4),
+      action: "stop",
+      timestamp: Date.now()
+    };
+    this.state.isMediaPaused = false;
+    this.state.mediaPlaybackCommand = cmd;
+    this.state.stageMedia = {
+      ...this.state.stageMedia,
+      active: false,
+      mainVideo: null,
+      secondaryVideo: null
+    };
+    sync.sendMediaCommand(cmd);
+    this.notify();
+  }
+
+  deactivateStageMedia(shouldNotify = true) {
+    if (this.state.stageMedia && this.state.stageMedia.active) {
+      this.state.stageMedia = {
+        ...this.state.stageMedia,
+        active: false,
+        mainVideo: null,
+        secondaryVideo: null
+      };
+      this.state.stageActiveQueueIndex = -1;
+      this.state.stageQueueFinished = false;
+      if (shouldNotify) {
+        this.notify();
+      }
+    }
   }
 }
 

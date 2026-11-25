@@ -32,7 +32,9 @@ class ProPresenterApp {
     this.isAudienceOpen = false;
     this.isVideowallOpen = false;
     this.videowallPopup = null;
+    this.selectedAudienceDisplayId = (typeof localStorage !== 'undefined' && localStorage.getItem('propresenter_audience_display_id')) || '';
     this.selectedVideowallDisplayId = (typeof localStorage !== 'undefined' && localStorage.getItem('propresenter_videowall_display_id')) || '';
+    this.availableDisplaysList = [];
     this.projectSearchQuery = '';
     this.editingDeckId = null;
     this.originalEditLines = [];
@@ -42,6 +44,7 @@ class ProPresenterApp {
     // Track Audience window status for operator audio echo prevention
     sync.onAudiencePresence((isOpen) => {
       this.isAudienceOpen = isOpen;
+      this.updateAudienceStatusUI(isOpen);
       this.updateOperatorAudioMute();
     });
 
@@ -53,13 +56,15 @@ class ProPresenterApp {
     if (window.electronAPI) {
       if (typeof window.electronAPI.onAudienceStatusChanged === 'function') {
         window.electronAPI.onAudienceStatusChanged((isOpen) => {
-          this.isAudienceOpen = isOpen;
+          this.isAudienceOpen = !!isOpen;
+          this.updateAudienceStatusUI(!!isOpen);
           this.updateOperatorAudioMute();
         });
       }
       if (typeof window.electronAPI.isAudienceOpen === 'function') {
         window.electronAPI.isAudienceOpen().then(isOpen => {
           this.isAudienceOpen = !!isOpen;
+          this.updateAudienceStatusUI(!!isOpen);
           this.updateOperatorAudioMute();
         }).catch(() => {});
       }
@@ -243,16 +248,22 @@ class ProPresenterApp {
       tab.addEventListener('click', () => {
         const mode = tab.getAttribute('data-mode');
         if (mode === 'edit') {
+          this.closeStageModeView(false);
           if (store.activeDeckId) {
             this.openFullScreenSongEditor(store.activeDeckId);
           } else {
             this.showToast("Selecciona una canción para editar en pantalla completa.", "warn");
           }
+        } else if (mode === 'stage') {
+          this.openStageModeView();
         } else if (mode === 'show') {
           this.closeFullScreenSongEditor();
+          this.closeStageModeView(true);
         }
       });
     });
+
+    this.initStageDualPlayerEvents();
 
     document.getElementById('btn-edit-active-deck')?.addEventListener('click', () => {
       if (store.activeDeckId) {
@@ -264,11 +275,7 @@ class ProPresenterApp {
     this.initFullScreenEditorEvents();
 
     document.getElementById('btn-open-audience')?.addEventListener('click', () => {
-      if (window.electronAPI && window.electronAPI.openAudienceWindow) {
-        window.electronAPI.openAudienceWindow();
-      } else {
-        window.open('audience.html', 'ProPresenterAudience', 'width=1280,height=720,menubar=no,toolbar=no');
-      }
+      this.toggleAudienceWindow();
     });
 
     document.getElementById('btn-open-stage')?.addEventListener('click', () => {
@@ -324,6 +331,7 @@ class ProPresenterApp {
 
     const timelineSlider = document.getElementById('input-media-timeline');
     const btnTimelinePlayPause = document.getElementById('btn-timeline-play-pause');
+    const btnTimelineStop = document.getElementById('btn-timeline-stop');
     const btnTimelineRestart = document.getElementById('btn-timeline-restart');
 
     if (timelineSlider) {
@@ -378,7 +386,8 @@ class ProPresenterApp {
 
     btnTimelinePlayPause?.addEventListener('click', () => {
       const activeVid = this.getActiveOperatorVideo();
-      if (!activeVid || store.state.isMediaCleared || !store.state.activeVideoUrl) return;
+      const isStageActive = Boolean(store.state.stageMedia?.active && store.state.stageMedia?.mainVideo?.src);
+      if (!activeVid || (!isStageActive && (store.state.isMediaCleared || !store.state.activeVideoUrl))) return;
       const shouldPause = !activeVid.paused;
       if (shouldPause) {
         activeVid.pause();
@@ -389,9 +398,26 @@ class ProPresenterApp {
       this.updateMediaTimelineUI();
     });
 
+    btnTimelineStop?.addEventListener('click', () => {
+      const isStageActive = Boolean(store.state.stageMedia?.active);
+      if (isStageActive) {
+        const activeVid = this.getActiveOperatorVideo();
+        if (activeVid) {
+          activeVid.pause();
+          try { activeVid.currentTime = 0; } catch (e) {}
+        }
+        store.stopStageMedia();
+        this.updateMediaTimelineUI();
+      } else if (!store.state.isMediaCleared && store.state.activeVideoUrl) {
+        store.clearMedia();
+        this.updateMediaTimelineUI();
+      }
+    });
+
     btnTimelineRestart?.addEventListener('click', () => {
       const activeVid = this.getActiveOperatorVideo();
-      if (!activeVid || store.state.isMediaCleared || !store.state.activeVideoUrl) return;
+      const isStageActive = Boolean(store.state.stageMedia?.active && store.state.stageMedia?.mainVideo?.src);
+      if (!activeVid || (!isStageActive && (store.state.isMediaCleared || !store.state.activeVideoUrl))) return;
       try {
         activeVid.currentTime = 0;
         activeVid.play().catch(() => {});
@@ -1372,7 +1398,10 @@ class ProPresenterApp {
   }
 
   initVideowallControls() {
+    const selectAudEl = document.getElementById('select-audience-display');
+    const selectStageMainEl = document.getElementById('select-stage-main-display');
     const selectEl = document.getElementById('select-videowall-display');
+    const selectStageSecEl = document.getElementById('select-stage-secondary-display');
     const selectImageModeEl = document.getElementById('select-videowall-image-mode');
     const btnToggle = document.getElementById('btn-toggle-videowall');
 
@@ -1385,9 +1414,25 @@ class ProPresenterApp {
       });
     }
 
-    selectEl?.addEventListener('change', () => {
-      const val = selectEl.value;
+    const onAudienceMonitorChange = (val) => {
+      this.selectedAudienceDisplayId = val;
+      if (selectAudEl && selectAudEl.value !== val) selectAudEl.value = val;
+      if (selectStageMainEl && selectStageMainEl.value !== val) selectStageMainEl.value = val;
+      try {
+        localStorage.setItem('propresenter_audience_display_id', String(val));
+      } catch (_) {}
+
+      if (this.isAudienceOpen && window.electronAPI?.openAudienceWindow) {
+        window.electronAPI.openAudienceWindow(val);
+        sync.sendUpdate(store.getProjectionPayload());
+      }
+      this.renderStageDualView(store.state);
+    };
+
+    const onVideowallMonitorChange = (val) => {
       this.selectedVideowallDisplayId = val;
+      if (selectEl && selectEl.value !== val) selectEl.value = val;
+      if (selectStageSecEl && selectStageSecEl.value !== val) selectStageSecEl.value = val;
       try {
         localStorage.setItem('propresenter_videowall_display_id', String(val));
       } catch (_) {}
@@ -1396,18 +1441,33 @@ class ProPresenterApp {
         window.electronAPI.openVideowall(val);
         sync.sendUpdate(store.getProjectionPayload());
       }
-    });
+      this.renderStageDualView(store.state);
+    };
+
+    selectAudEl?.addEventListener('change', () => onAudienceMonitorChange(selectAudEl.value));
+    selectStageMainEl?.addEventListener('change', () => onAudienceMonitorChange(selectStageMainEl.value));
+    selectEl?.addEventListener('change', () => onVideowallMonitorChange(selectEl.value));
+    selectStageSecEl?.addEventListener('change', () => onVideowallMonitorChange(selectStageSecEl.value));
 
     btnToggle?.addEventListener('click', () => {
       this.toggleVideowallWindow();
     });
   }
 
-  async populateVideowallDisplays() {
-    const selectEl = document.getElementById('select-videowall-display');
-    if (!selectEl) return;
+  getDisplayShortLabel(displayId, fallbackLabel = 'Monitor') {
+    const found = (this.availableDisplaysList || []).find(d => String(d.id) === String(displayId));
+    if (!found) return fallbackLabel;
+    return `Monitor ${found.index}${found.isPrimary ? ' (Principal)' : ''}`;
+  }
 
-    const savedId = (typeof localStorage !== 'undefined' && localStorage.getItem('propresenter_videowall_display_id')) || '';
+  async populateVideowallDisplays() {
+    const selectAudEl = document.getElementById('select-audience-display');
+    const selectStageMainEl = document.getElementById('select-stage-main-display');
+    const selectEl = document.getElementById('select-videowall-display');
+    const selectStageSecEl = document.getElementById('select-stage-secondary-display');
+
+    const savedAudId = (typeof localStorage !== 'undefined' && localStorage.getItem('propresenter_audience_display_id')) || '';
+    const savedVwId = (typeof localStorage !== 'undefined' && localStorage.getItem('propresenter_videowall_display_id')) || '';
     let displays = [];
 
     if (window.electronAPI && typeof window.electronAPI.getDisplays === 'function') {
@@ -1427,27 +1487,89 @@ class ProPresenterApp {
       ];
     }
 
-    selectEl.innerHTML = displays.map(d => {
+    this.availableDisplaysList = displays;
+
+    const optionsHtml = displays.map(d => {
       const label = `Monitor ${d.index}${d.isPrimary ? ' (Principal)' : ''} (${d.bounds?.width || 1920}×${d.bounds?.height || 1080})`;
       return `<option value="${d.id}">${label}</option>`;
     }).join('');
 
-    let chosenId = '';
-    if (savedId && displays.some(d => String(d.id) === String(savedId))) {
-      chosenId = String(savedId);
+    [selectAudEl, selectStageMainEl, selectEl, selectStageSecEl].forEach(sel => {
+      if (sel) sel.innerHTML = optionsHtml;
+    });
+
+    // 1. Selección por defecto para Audiencia (Monitor 2 si existe)
+    let chosenAudId = '';
+    if (savedAudId && displays.some(d => String(d.id) === String(savedAudId))) {
+      chosenAudId = String(savedAudId);
     } else {
-      const defaultDisplay = displays[2] || displays.find(d => !d.isPrimary) || displays[0];
-      chosenId = defaultDisplay ? String(defaultDisplay.id) : '';
-      if (chosenId) {
+      const defAud = displays.find(d => !d.isPrimary) || displays[1] || displays[0];
+      chosenAudId = defAud ? String(defAud.id) : '';
+      if (chosenAudId) {
+        try { localStorage.setItem('propresenter_audience_display_id', chosenAudId); } catch (_) {}
+      }
+    }
+    if (chosenAudId) {
+      if (selectAudEl) selectAudEl.value = chosenAudId;
+      if (selectStageMainEl) selectStageMainEl.value = chosenAudId;
+      this.selectedAudienceDisplayId = chosenAudId;
+    }
+
+    // 2. Selección por defecto para Videowall (Monitor 3 si existe, sino Monitor 2)
+    let chosenVwId = '';
+    if (savedVwId && displays.some(d => String(d.id) === String(savedVwId))) {
+      chosenVwId = String(savedVwId);
+    } else {
+      const defaultDisplay = displays[2] || displays.filter(d => !d.isPrimary)[1] || displays.find(d => !d.isPrimary) || displays[0];
+      chosenVwId = defaultDisplay ? String(defaultDisplay.id) : '';
+      if (chosenVwId) {
         try {
-          localStorage.setItem('propresenter_videowall_display_id', chosenId);
+          localStorage.setItem('propresenter_videowall_display_id', chosenVwId);
         } catch (_) {}
       }
     }
 
-    if (chosenId) {
-      selectEl.value = chosenId;
-      this.selectedVideowallDisplayId = chosenId;
+    if (chosenVwId) {
+      if (selectEl) selectEl.value = chosenVwId;
+      if (selectStageSecEl) selectStageSecEl.value = chosenVwId;
+      this.selectedVideowallDisplayId = chosenVwId;
+    }
+
+    this.renderStageDualView(store.state);
+  }
+
+  updateAudienceStatusUI(isOpen) {
+    this.isAudienceOpen = Boolean(isOpen);
+    const btnAud = document.getElementById('btn-open-audience');
+    const dotAud = document.getElementById('audience-status-dot');
+    const lblAud = document.getElementById('lbl-toggle-audience');
+    if (btnAud) {
+      btnAud.classList.toggle('active', this.isAudienceOpen);
+      btnAud.setAttribute('aria-pressed', String(this.isAudienceOpen));
+    }
+    if (dotAud) {
+      dotAud.classList.toggle('active', this.isAudienceOpen);
+    }
+    if (lblAud) {
+      lblAud.textContent = this.isAudienceOpen ? 'Audiencia ON' : 'Audiencia';
+    }
+  }
+
+  async toggleAudienceWindow() {
+    const selectAudEl = document.getElementById('select-audience-display');
+    const displayId = selectAudEl ? selectAudEl.value : this.selectedAudienceDisplayId;
+    if (displayId) {
+      this.selectedAudienceDisplayId = displayId;
+      try { localStorage.setItem('propresenter_audience_display_id', String(displayId)); } catch (_) {}
+    }
+
+    if (window.electronAPI && typeof window.electronAPI.openAudienceWindow === 'function') {
+      await window.electronAPI.openAudienceWindow(displayId);
+      this.updateAudienceStatusUI(true);
+      sync.sendUpdate(store.getProjectionPayload());
+    } else {
+      window.open('audience.html', 'ProPresenterAudience', 'width=1280,height=720,menubar=no,toolbar=no');
+      this.updateAudienceStatusUI(true);
     }
   }
 
@@ -1739,6 +1861,11 @@ class ProPresenterApp {
     if (this.lastQueueAdvanceTime && (now - this.lastQueueAdvanceTime < 750)) {
       return;
     }
+    if (store.state.stageMedia && store.state.stageMedia.active) {
+      this.lastQueueAdvanceTime = now;
+      store.advanceStageMainQueue();
+      return;
+    }
     if (Array.isArray(store.state.mediaQueue) && store.state.mediaQueue.length > 0) {
       this.lastQueueAdvanceTime = now;
       store.advanceMediaQueue();
@@ -1868,8 +1995,14 @@ class ProPresenterApp {
     const iconPlayPause = document.getElementById('icon-timeline-play-pause');
     const btnRestart = document.getElementById('btn-timeline-restart');
 
-    const isCleared = !!state.isMediaCleared || !state.activeVideoUrl;
-    const isImage = !isCleared && (
+    const stageActive = Boolean(state.stageMedia && state.stageMedia.active);
+    const stageMainVideo = stageActive ? state.stageMedia.mainVideo : null;
+    const effectiveVideoUrl = stageActive ? (stageMainVideo?.src || '') : state.activeVideoUrl;
+
+    const isCleared = stageActive
+      ? !effectiveVideoUrl
+      : (!!state.isMediaCleared || !state.activeVideoUrl);
+    const isImage = !stageActive && !isCleared && (
       (state.activeVideoType && state.activeVideoType.startsWith('image/')) ||
       (state.activeVideoIsImage && !state.activeVideoType?.startsWith('video/')) ||
       !!(state.activeVideoUrl && (state.activeVideoUrl.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i) || state.activeVideoUrl.startsWith('data:image/')))
@@ -1879,7 +2012,9 @@ class ProPresenterApp {
     panel.classList.toggle('is-static-image', isImage);
 
     const activeLibItem = state.mediaLibrary?.find(m => m.url === state.activeVideoUrl);
-    const activeTitle = state.activeVideoName || activeLibItem?.name || state.activeVideoTitle || 'Fondo Multimedia';
+    const activeTitle = stageActive
+      ? (stageMainVideo?.name || 'Stage: Cola Finalizada')
+      : (state.activeVideoName || activeLibItem?.name || state.activeVideoTitle || 'Fondo Multimedia');
 
     if (isCleared) {
       if (iconEl) iconEl.textContent = '⬛';
@@ -2242,6 +2377,480 @@ class ProPresenterApp {
       return;
     }
     this.openFullScreenSongEditor(deckId);
+  }
+
+  // =========================================================================
+  // MÓDULO STAGE: REPRODUCTOR DUAL SINCRONIZADO (PANTALLA PRINCIPAL + VIDEOWALL)
+  // =========================================================================
+  openStageModeView() {
+    this.closeAllModals();
+    const appEl = document.getElementById('app');
+    if (appEl) {
+      if (appEl.classList.contains('edit-mode-active')) {
+        this.saveCurrentEditorCanvasText();
+        appEl.classList.remove('edit-mode-active');
+      }
+      appEl.classList.add('stage-mode-active');
+    }
+
+    document.querySelectorAll('.mode-tab').forEach(t => {
+      t.classList.toggle('active', t.getAttribute('data-mode') === 'stage');
+    });
+
+    this.renderStageDualView(store.state);
+  }
+
+  closeStageModeView(activateShowTab = true) {
+    const appEl = document.getElementById('app');
+    if (appEl) {
+      appEl.classList.remove('stage-mode-active');
+    }
+    if (activateShowTab) {
+      document.querySelectorAll('.mode-tab').forEach(t => {
+        t.classList.toggle('active', t.getAttribute('data-mode') === 'show');
+      });
+    }
+  }
+
+  initStageDualPlayerEvents() {
+    this._probingStageDurations = new Set();
+
+    const btnAddMain = document.getElementById('btn-stage-add-main-video');
+    const btnAddSec = document.getElementById('btn-stage-add-secondary-video');
+    const btnCopyMain = document.getElementById('btn-stage-copy-from-media-main');
+    const btnCopySec = document.getElementById('btn-stage-copy-from-media-secondary');
+    const inputMainFiles = document.getElementById('input-stage-main-files');
+    const inputSecFiles = document.getElementById('input-stage-secondary-files');
+    const btnSendScreens = document.getElementById('btn-stage-send-screens');
+    const btnClearSelection = document.getElementById('btn-stage-clear-selection');
+    const btnStopStage = document.getElementById('btn-stage-stop-playback');
+    const dockMain = document.getElementById('stage-dock-main');
+    const dockSec = document.getElementById('stage-dock-secondary');
+
+    btnAddMain?.addEventListener('click', () => this.triggerStageVideoPicker('main', inputMainFiles));
+    btnAddSec?.addEventListener('click', () => this.triggerStageVideoPicker('secondary', inputSecFiles));
+
+    btnCopyMain?.addEventListener('click', () => this.copyVideosFromMediaToStageDock('main'));
+    btnCopySec?.addEventListener('click', () => this.copyVideosFromMediaToStageDock('secondary'));
+
+    inputMainFiles?.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length > 0) {
+        await this.importStageVideoFiles('main', files);
+      }
+      inputMainFiles.value = '';
+    });
+
+    inputSecFiles?.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length > 0) {
+        await this.importStageVideoFiles('secondary', files);
+      }
+      inputSecFiles.value = '';
+    });
+
+    // Drag & Drop independiente en ambos docks de Stage
+    [
+      { el: dockMain, dock: 'main' },
+      { el: dockSec, dock: 'secondary' }
+    ].forEach(({ el, dock }) => {
+      if (!el) return;
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evtName => {
+        el.addEventListener(evtName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+      });
+      el.addEventListener('drop', async (e) => {
+        const rawFiles = Array.from(e.dataTransfer?.files || []);
+        const mediaFiles = rawFiles.filter(f =>
+          (f.type && (f.type.startsWith('video/') || f.type.startsWith('image/'))) ||
+          /\.(mp4|webm|mov|mkv|avi|png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(f.name || '')
+        );
+        if (mediaFiles.length > 0) {
+          await this.importStageVideoFiles(dock, mediaFiles);
+        } else {
+          this.showToast('Arrastra archivos de video o imagen a este dock.', 'warn');
+        }
+      });
+    });
+
+    btnSendScreens?.addEventListener('click', async () => {
+      if (!store.canDispatchStage()) return;
+      // Asegurar que las ventanas de los monitores seleccionados estén ubicadas en el monitor elegido
+      if (window.electronAPI) {
+        if (this.isAudienceOpen && this.selectedAudienceDisplayId && window.electronAPI.openAudienceWindow) {
+          await window.electronAPI.openAudienceWindow(this.selectedAudienceDisplayId);
+        }
+        if (this.isVideowallOpen && this.selectedVideowallDisplayId && window.electronAPI.openVideowall) {
+          await window.electronAPI.openVideowall(this.selectedVideowallDisplayId);
+        }
+      }
+      const dispatched = store.dispatchStageToScreens();
+      if (dispatched) {
+        const mainMonLabel = this.getDisplayShortLabel(this.selectedAudienceDisplayId, 'Monitor Principal');
+        const secMonLabel = this.getDisplayShortLabel(this.selectedVideowallDisplayId, 'Monitor Videowall');
+        this.showToast(
+          `Enviado: ${mainMonLabel} ➔ ${dispatched.mainVideo?.name || '--'} | ${secMonLabel} ➔ ${dispatched.secondaryVideo?.name || '--'}`,
+          'success'
+        );
+      }
+    });
+
+    btnClearSelection?.addEventListener('click', () => {
+      store.clearStageSelections();
+    });
+
+    btnStopStage?.addEventListener('click', () => {
+      const activeVid = this.getActiveOperatorVideo();
+      if (activeVid) {
+        activeVid.pause();
+        try { activeVid.currentTime = 0; } catch (e) {}
+      }
+      store.stopStageMedia();
+      this.updateMediaTimelineUI();
+    });
+  }
+
+  async triggerStageVideoPicker(targetDock, fallbackInputEl) {
+    if (window.electronAPI && typeof window.electronAPI.selectMediaFiles === 'function') {
+      try {
+        const picked = await window.electronAPI.selectMediaFiles();
+        if (!Array.isArray(picked) || picked.length === 0) return;
+        const validMedia = picked.filter(f => /\.(mp4|webm|mov|mkv|avi|png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(f.name || f.url || ''));
+        if (validMedia.length === 0) {
+          this.showToast('Selecciona archivos de video o imagen.', 'warn');
+          return;
+        }
+        const items = await Promise.all(validMedia.map(async (f, idx) => {
+          const id = `stage-${targetDock}-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`;
+          const isImg = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(f.name || f.url || '');
+          const mimeType = isImg ? 'image/png' : 'video/mp4';
+          let thumb = isImg ? f.url : '';
+          try {
+            const gen = await MediaCache.generateThumbnail(f.url, mimeType);
+            if (gen) {
+              thumb = gen;
+              await MediaCache.saveThumbnail(id, thumb);
+            }
+          } catch (_) {}
+          const duration = isImg ? 0 : await this.probeVideoDurationPromise(f.url);
+          return {
+            id,
+            name: f.name,
+            url: f.url,
+            filePath: f.filePath || '',
+            type: mimeType,
+            isImage: isImg,
+            duration,
+            thumbnail: thumb
+          };
+        }));
+        store.addStageMediaBatch(targetDock, items);
+        this.showToast(`${items.length} archivo${items.length === 1 ? '' : 's'} agregado${items.length === 1 ? '' : 's'} al dock ${targetDock === 'secondary' ? 'Secundario (Videowall)' : 'Principal'}.`, 'success');
+      } catch (err) {
+        console.warn('[Stage] Error seleccionando archivos:', err);
+      }
+    } else {
+      fallbackInputEl?.click();
+    }
+  }
+
+  async importStageVideoFiles(targetDock, files) {
+    const mediaFiles = Array.from(files || []).filter(f =>
+      (f.type && (f.type.startsWith('video/') || f.type.startsWith('image/'))) ||
+      /\.(mp4|webm|mov|mkv|avi|png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(f.name || '')
+    );
+    if (mediaFiles.length === 0) {
+      this.showToast('Selecciona archivos de video o imagen.', 'warn');
+      return;
+    }
+
+    const processed = await this.processMediaFiles(mediaFiles, 'Stage');
+    const withDurations = await Promise.all(processed.map(async (item, idx) => {
+      const isImg = Boolean((item.type && item.type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(item.name || item.url || ''));
+      const duration = isImg ? 0 : await this.probeVideoDurationPromise(item.url);
+      return {
+        ...item,
+        id: `stage-${targetDock}-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        isImage: isImg,
+        duration
+      };
+    }));
+
+    store.addStageMediaBatch(targetDock, withDurations);
+    this.showToast(`${withDurations.length} archivo${withDurations.length === 1 ? '' : 's'} importado${withDurations.length === 1 ? '' : 's'} al dock ${targetDock === 'secondary' ? 'Secundario (Videowall)' : 'Principal'}.`, 'success');
+  }
+
+  copyVideosFromMediaToStageDock(targetDock) {
+    const mediaItems = store.state.mediaLibrary || [];
+
+    if (mediaItems.length === 0) {
+      this.showToast('No hay videos ni imágenes en la Galería Media para copiar.', 'warn');
+      return;
+    }
+
+    const cloned = mediaItems.map((m, idx) => {
+      const isImg = Boolean((m.type && m.type.startsWith('image/')) || (m.url && /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(m.url)));
+      return {
+        id: `stage-${targetDock}-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        name: m.name,
+        url: m.url,
+        filePath: m.filePath || '',
+        type: m.type || (isImg ? 'image/png' : 'video/mp4'),
+        isImage: isImg,
+        duration: typeof m.duration === 'number' ? m.duration : 0,
+        thumbnail: m.thumbnail || (isImg ? m.url : '')
+      };
+    });
+
+    store.addStageMediaBatch(targetDock, cloned);
+    this.showToast(`Videos e imágenes de Galería Media disponibles en el dock ${targetDock === 'secondary' ? 'Secundario (Videowall)' : 'Principal'}.`, 'info');
+  }
+
+  probeVideoDurationPromise(url) {
+    if (!url || typeof document === 'undefined') return Promise.resolve(0);
+    return new Promise((resolve) => {
+      const vid = document.createElement('video');
+      vid.preload = 'metadata';
+      vid.muted = true;
+      let done = false;
+      const finish = (dur) => {
+        if (done) return;
+        done = true;
+        try {
+          vid.removeAttribute('src');
+          vid.load();
+        } catch (_) {}
+        resolve(typeof dur === 'number' && isFinite(dur) && dur > 0 ? dur : 0);
+      };
+      const timer = setTimeout(() => finish(0), 2200);
+      vid.onloadedmetadata = () => {
+        clearTimeout(timer);
+        finish(vid.duration);
+      };
+      vid.onerror = () => {
+        clearTimeout(timer);
+        finish(0);
+      };
+      vid.src = url;
+    });
+  }
+
+  ensureStageItemDurationProbed(targetDock, item) {
+    if (!item || !item.id || !item.url || item.isImage || (item.type && item.type.startsWith('image/')) || (typeof item.duration === 'number' && item.duration > 0)) return;
+    const key = `${targetDock}:${item.id}`;
+    if (this._probingStageDurations?.has(key)) return;
+    this._probingStageDurations?.add(key);
+
+    this.probeVideoDurationPromise(item.url).then((dur) => {
+      if (dur > 0) {
+        store.updateStageMediaDuration(targetDock, item.id, dur);
+      }
+    }).finally(() => {
+      this._probingStageDurations?.delete(key);
+    });
+  }
+
+  renderStageDualView(state = store.state) {
+    const mainGridEl = document.getElementById('stage-main-grid');
+    const secGridEl = document.getElementById('stage-secondary-grid');
+    if (!mainGridEl || !secGridEl) return;
+
+    const mainLib = Array.isArray(state.stageMainLibrary) ? state.stageMainLibrary : [];
+    const secLib = Array.isArray(state.stageSecondaryLibrary) ? state.stageSecondaryLibrary : [];
+    const queueIds = Array.isArray(state.stageMainQueue) ? state.stageMainQueue : [];
+    const mainSelectedId = state.stageMainSelectedId || null;
+    const secSelectedId = state.stageSecondarySelectedId || null;
+    const stageActive = Boolean(state.stageMedia && state.stageMedia.active);
+    const liveMainId = stageActive ? (state.stageMedia.mainVideo?.id || '') : '';
+    const liveMainSrc = stageActive ? (state.stageMedia.mainVideo?.src || '') : '';
+    const liveSecId = stageActive ? (state.stageMedia.secondaryVideo?.id || '') : '';
+    const liveSecSrc = stageActive ? (state.stageMedia.secondaryVideo?.src || '') : '';
+
+    const mainMonLabel = this.getDisplayShortLabel(this.selectedAudienceDisplayId, 'Monitor 2');
+    const secMonLabel = this.getDisplayShortLabel(this.selectedVideowallDisplayId, 'Monitor 3');
+
+    // 1. Renderizar Dock Superior (Videos / Imágenes Pantalla Principal)
+    if (mainLib.length === 0) {
+      mainGridEl.innerHTML = `
+        <div class="stage-empty-state">
+          <div>${iconSvg('tv', { size: 26, className: 'lucide-icon icon-gold' })}</div>
+          <div><strong>Dock Superior sin medios cargados (Destino: ${this.escapeHtml(mainMonLabel)})</strong></div>
+          <div>Haz clic en <strong>"Importar Video / Imagen"</strong>, usa <strong>"Traer de Media"</strong> o arrastra tus videos/imágenes aquí.</div>
+        </div>
+      `;
+    } else {
+      mainGridEl.innerHTML = mainLib.map(item => {
+        const isImg = Boolean(item.isImage || (item.type && item.type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|svg|bmp)($|\?)/i.test(item.url || ''));
+        if (!isImg) this.ensureStageItemDurationProbed('main', item);
+        const queuePos = queueIds.indexOf(item.id);
+        const isInQueue = queuePos !== -1;
+        const isSingleSelected = !isInQueue && queueIds.length === 0 && mainSelectedId === item.id;
+        const isLive = stageActive && ((liveMainId && liveMainId === item.id) || (!liveMainId && liveMainSrc && liveMainSrc === item.url));
+        const durLabel = (!isImg && typeof item.duration === 'number' && item.duration > 0)
+          ? this.formatMediaTime(item.duration)
+          : '';
+        const thumbSrc = item.thumbnail || (isImg ? item.url : '');
+
+        const thumbHtml = thumbSrc
+          ? `<img src="${thumbSrc}" class="stage-card-thumb" alt="${this.escapeHtml(item.name)}" />`
+          : `<div class="stage-card-thumb-fallback">${iconSvg(isImg ? 'image' : 'film', { size: 28 })}</div>`;
+
+        return `
+          <div class="stage-video-card ${isSingleSelected ? 'selected-single' : ''} ${isInQueue ? 'in-queue' : ''} ${isLive ? 'is-live-playing' : ''}" data-stage-dock="main" data-item-id="${item.id}" title="${this.escapeHtml(item.name)} ➔ ${this.escapeHtml(mainMonLabel)} • Clic: Seleccionar • Alt+Click: Cola">
+            ${thumbHtml}
+            ${isInQueue ? `<span class="stage-card-queue-badge" title="Posición #${queuePos + 1} en la cola">${queuePos + 1}</span>` : ''}
+            ${isLive ? `<span class="stage-card-live-pill">EN VIVO (${this.escapeHtml(mainMonLabel)})</span>` : ''}
+            <span class="stage-card-type-tag ${isImg ? 'is-img' : ''}">${isImg ? 'IMAGEN' : 'VIDEO'}</span>
+            ${durLabel ? `<span class="stage-card-duration-badge">${durLabel}</span>` : ''}
+            <button type="button" class="stage-card-delete-btn" data-del-dock="main" data-del-id="${item.id}" title="Quitar de este dock">${iconSvg('x', { size: 12 })}</button>
+            <div class="stage-card-footer">
+              <span class="stage-card-title">${this.escapeHtml(item.name)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 2. Renderizar Dock Inferior (Videos / Imágenes Pantalla Secundaria / Videowall)
+    if (secLib.length === 0) {
+      secGridEl.innerHTML = `
+        <div class="stage-empty-state">
+          <div>${iconSvg('film', { size: 26, className: 'lucide-icon icon-green' })}</div>
+          <div><strong>Dock Inferior sin medios cargados (Destino: ${this.escapeHtml(secMonLabel)})</strong></div>
+          <div>Haz clic en <strong>"Importar Video / Imagen"</strong>, usa <strong>"Traer de Media"</strong> o arrastra videos/imágenes acompañantes aquí.</div>
+        </div>
+      `;
+    } else {
+      secGridEl.innerHTML = secLib.map(item => {
+        const isImg = Boolean(item.isImage || (item.type && item.type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|svg|bmp)($|\?)/i.test(item.url || ''));
+        if (!isImg) this.ensureStageItemDurationProbed('secondary', item);
+        const isSelected = secSelectedId === item.id;
+        const isLive = stageActive && ((liveSecId && liveSecId === item.id) || (!liveSecId && liveSecSrc && liveSecSrc === item.url));
+        const durLabel = (!isImg && typeof item.duration === 'number' && item.duration > 0)
+          ? this.formatMediaTime(item.duration)
+          : '';
+        const thumbSrc = item.thumbnail || (isImg ? item.url : '');
+
+        const thumbHtml = thumbSrc
+          ? `<img src="${thumbSrc}" class="stage-card-thumb" alt="${this.escapeHtml(item.name)}" />`
+          : `<div class="stage-card-thumb-fallback">${iconSvg(isImg ? 'image' : 'film', { size: 28 })}</div>`;
+
+        return `
+          <div class="stage-video-card ${isSelected ? 'selected-single' : ''} ${isLive ? 'is-live-playing' : ''}" data-stage-dock="secondary" data-item-id="${item.id}" title="${this.escapeHtml(item.name)} ➔ ${this.escapeHtml(secMonLabel)} • Clic: Seleccionar para este monitor">
+            ${thumbHtml}
+            ${isLive ? `<span class="stage-card-live-pill">EN VIVO (${this.escapeHtml(secMonLabel)})</span>` : ''}
+            <span class="stage-card-type-tag ${isImg ? 'is-img' : ''}">${isImg ? 'IMAGEN' : 'VIDEO'}</span>
+            ${durLabel ? `<span class="stage-card-duration-badge">${durLabel}</span>` : ''}
+            <button type="button" class="stage-card-delete-btn" data-del-dock="secondary" data-del-id="${item.id}" title="Quitar de este dock">${iconSvg('x', { size: 12 })}</button>
+            <div class="stage-card-footer">
+              <span class="stage-card-title">${this.escapeHtml(item.name)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Bind clicks en tarjetas del Dock Superior (Clic normal vs Alt + Click)
+    mainGridEl.querySelectorAll('.stage-video-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.stage-card-delete-btn')) return;
+        const itemId = card.getAttribute('data-item-id');
+        if (!itemId) return;
+        if (e.altKey) {
+          store.toggleStageMainQueueItem(itemId);
+        } else {
+          store.selectStageMainVideo(itemId);
+        }
+      });
+    });
+
+    // Bind clicks en tarjetas del Dock Inferior (Clic normal)
+    secGridEl.querySelectorAll('.stage-video-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.stage-card-delete-btn')) return;
+        const itemId = card.getAttribute('data-item-id');
+        if (!itemId) return;
+        store.selectStageSecondaryVideo(itemId);
+      });
+    });
+
+    // Bind botones eliminar tarjeta en ambos docks
+    document.querySelectorAll('#view-stage-dual .stage-card-delete-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dock = btn.getAttribute('data-del-dock');
+        const id = btn.getAttribute('data-del-id');
+        if (dock && id) {
+          store.deleteStageMediaItem(dock, id);
+        }
+      });
+    });
+
+    // 3. Actualizar resumen de barra de acción y estado del botón "Enviar a pantallas"
+    const lblTargetMain = document.getElementById('lbl-stage-target-main');
+    const lblTargetSec = document.getElementById('lbl-stage-target-secondary');
+    const lblSummaryMain = document.getElementById('lbl-stage-summary-main');
+    const lblSummarySec = document.getElementById('lbl-stage-summary-secondary');
+    const btnSendScreens = document.getElementById('btn-stage-send-screens');
+    const btnStopStage = document.getElementById('btn-stage-stop-playback');
+    const badgeStageLive = document.getElementById('badge-stage-live-status');
+
+    if (lblTargetMain) lblTargetMain.textContent = `${mainMonLabel} (Principal):`;
+    if (lblTargetSec) lblTargetSec.textContent = `${secMonLabel} (Videowall):`;
+
+    if (lblSummaryMain) {
+      if (queueIds.length > 0) {
+        const firstQueued = mainLib.find(m => m.id === queueIds[0]);
+        lblSummaryMain.textContent = `Cola (${queueIds.length} video${queueIds.length === 1 ? '' : 's'}${firstQueued ? `: ${firstQueued.name}` : ''})`;
+        lblSummaryMain.style.color = 'var(--color-brand-amber)';
+      } else if (mainSelectedId) {
+        const sel = mainLib.find(m => m.id === mainSelectedId);
+        lblSummaryMain.textContent = sel ? sel.name : 'Sin selección';
+        lblSummaryMain.style.color = sel ? '#ffffff' : 'var(--text-dim)';
+      } else {
+        lblSummaryMain.textContent = 'Sin selección';
+        lblSummaryMain.style.color = 'var(--text-dim)';
+      }
+    }
+
+    if (lblSummarySec) {
+      if (secSelectedId) {
+        const selSec = secLib.find(m => m.id === secSelectedId);
+        lblSummarySec.textContent = selSec ? selSec.name : 'Sin selección';
+        lblSummarySec.style.color = selSec ? '#34d399' : 'var(--text-dim)';
+      } else {
+        lblSummarySec.textContent = 'Sin selección';
+        lblSummarySec.style.color = 'var(--text-dim)';
+      }
+    }
+
+    if (btnSendScreens) {
+      btnSendScreens.disabled = !store.canDispatchStage();
+    }
+
+    if (btnStopStage) {
+      btnStopStage.style.display = stageActive ? 'inline-flex' : 'none';
+    }
+
+    if (badgeStageLive) {
+      if (stageActive) {
+        badgeStageLive.style.display = 'inline-flex';
+        if (state.stageQueueFinished || state.stageMedia?.mainEnded) {
+          badgeStageLive.textContent = 'COLA FINALIZADA';
+          badgeStageLive.classList.add('finished');
+        } else if (queueIds.length > 0 && state.stageActiveQueueIndex >= 0) {
+          badgeStageLive.textContent = `EN VIVO (COLA ${state.stageActiveQueueIndex + 1}/${queueIds.length})`;
+          badgeStageLive.classList.remove('finished');
+        } else {
+          badgeStageLive.textContent = 'STAGE EN VIVO';
+          badgeStageLive.classList.remove('finished');
+        }
+      } else {
+        badgeStageLive.style.display = 'none';
+      }
+    }
   }
 
   // =========================================================================
@@ -6099,11 +6708,19 @@ class ProPresenterApp {
     }
 
     if (bgA && bgB) {
+      const stageActive = Boolean(state.stageMedia && state.stageMedia.active);
+      const targetOperatorMediaUrl = stageActive
+        ? (state.stageMedia.mainVideo?.src || '')
+        : state.activeVideoUrl;
+      const targetOperatorPlayId = stageActive
+        ? (`stage-${state.stageMedia.syncTimestamp || 0}-${state.stageMedia.queueIndex ?? -1}-${targetOperatorMediaUrl}`)
+        : (state.activeMediaPlayId || 0);
+
       const shouldOperatorMute = this.isAudienceOpen || !!state.isMediaAudioMuted;
       const operatorVolume = typeof state.mediaAudioVolume === 'number' ? state.mediaAudioVolume : 1.0;
       const playbackRate = typeof state.mediaPlaybackRate === 'number' ? Math.max(0.25, Math.min(2.0, state.mediaPlaybackRate)) : 1.0;
       const hasQueue = Array.isArray(state.mediaQueue) && state.mediaQueue.length > 0;
-      const shouldLoop = !hasQueue;
+      const shouldLoop = stageActive ? false : !hasQueue;
 
       bgA.muted = shouldOperatorMute;
       bgB.muted = shouldOperatorMute;
@@ -6114,7 +6731,11 @@ class ProPresenterApp {
       bgA.loop = shouldLoop;
       bgB.loop = shouldLoop;
 
-      if (state.forceTransparentBackground || state.isMediaCleared || !state.activeVideoUrl) {
+      const shouldClearOperatorPreview = stageActive
+        ? !targetOperatorMediaUrl
+        : (state.forceTransparentBackground || state.isMediaCleared || !state.activeVideoUrl);
+
+      if (shouldClearOperatorPreview) {
         if (mediaMode === 'cut') {
           bgA.style.transition = 'none';
           bgB.style.transition = 'none';
@@ -6139,22 +6760,24 @@ class ProPresenterApp {
           this.operatorMediaPlayId = 0;
           if (this._operatorClearVramTimeout) clearTimeout(this._operatorClearVramTimeout);
           this._operatorClearVramTimeout = setTimeout(() => {
-            if (store.state.forceTransparentBackground || store.state.isMediaCleared || !store.state.activeVideoUrl) {
+            if (!this.operatorVideoUrl) {
               bgA.removeAttribute('src');
               bgB.removeAttribute('src');
               try { bgA.load(); bgB.load(); } catch (e) {}
             }
           }, (mediaMode === 'cut' ? 0 : dur) + 60);
         }
-      } else if (this.operatorVideoUrl !== state.activeVideoUrl || (state.activeMediaPlayId && this.operatorMediaPlayId !== state.activeMediaPlayId)) {
+      } else if (this.operatorVideoUrl !== targetOperatorMediaUrl || (targetOperatorPlayId && this.operatorMediaPlayId !== targetOperatorPlayId)) {
         if (this._operatorClearVramTimeout) {
           clearTimeout(this._operatorClearVramTimeout);
           this._operatorClearVramTimeout = null;
         }
-        this.operatorVideoUrl = state.activeVideoUrl;
-        this.operatorMediaPlayId = state.activeMediaPlayId || 0;
+        this.operatorVideoUrl = targetOperatorMediaUrl;
+        this.operatorMediaPlayId = targetOperatorPlayId;
 
-        const isImage = (state.activeVideoType && state.activeVideoType.startsWith('image/')) || (state.activeVideoIsImage && !state.activeVideoType?.startsWith('video/')) || isMediaImage(state.activeVideoUrl, state.activeVideoType);
+        const isImage = stageActive
+          ? Boolean(state.stageMedia.mainVideo?.isImage || isMediaImage(targetOperatorMediaUrl, state.stageMedia.mainVideo?.type))
+          : ((state.activeVideoType && state.activeVideoType.startsWith('image/')) || (state.activeVideoIsImage && !state.activeVideoType?.startsWith('video/')) || isMediaImage(targetOperatorMediaUrl, state.activeVideoType));
         const incomingMedia = this.operatorActiveMediaLayer === 'A' ? { video: bgB, img: imgB } : { video: bgA, img: imgA };
         const outgoingMedia = this.operatorActiveMediaLayer === 'A' ? { video: bgA, img: imgA } : { video: bgB, img: imgB };
         this.operatorActiveMediaLayer = this.operatorActiveMediaLayer === 'A' ? 'B' : 'A';
@@ -6162,14 +6785,14 @@ class ProPresenterApp {
         const incomingEl = (isImage && incomingMedia.img) ? incomingMedia.img : incomingMedia.video;
 
         if (isImage && incomingMedia.img) {
-          incomingMedia.img.src = state.activeVideoUrl;
+          incomingMedia.img.src = targetOperatorMediaUrl;
           incomingMedia.img.style.display = 'block';
           if (incomingMedia.video) {
             incomingMedia.video.style.display = 'none';
             incomingMedia.video.pause();
           }
         } else if (incomingMedia.video) {
-          incomingMedia.video.src = state.activeVideoUrl;
+          incomingMedia.video.src = targetOperatorMediaUrl;
           incomingMedia.video.currentTime = 0;
           incomingMedia.video.loop = shouldLoop;
           incomingMedia.video.muted = shouldOperatorMute;
@@ -6239,10 +6862,12 @@ class ProPresenterApp {
 
     // Update Interactive Media Timeline UI
     this.updateMediaTimelineUI(state);
+    this.renderStageDualView(state);
 
+    const isStageModePlaying = Boolean(state.stageMedia && state.stageMedia.active);
 
     // 5. Presentation Slide Image + Text & Stage Previews (Escalado equivalente e idéntico a la pantalla de Audiencia)
-    const targetSlideImage = (!state.isTextCleared && state.liveSlideImage) ? state.liveSlideImage : "";
+    const targetSlideImage = (!isStageModePlaying && !state.isTextCleared && state.liveSlideImage) ? state.liveSlideImage : "";
     const operatorSlideImgEl = document.getElementById('operator-slide-img-preview');
     if (operatorSlideImgEl) {
       operatorSlideImgEl.style.transition = state.textTransition === 'cut' ? 'opacity 0s' : `opacity ${dur}ms ease-in-out`;
@@ -6258,7 +6883,7 @@ class ProPresenterApp {
       }
     }
 
-    const targetText = (state.isTextCleared || targetSlideImage || !state.liveText) ? "" : state.liveText;
+    const targetText = (isStageModePlaying || state.isTextCleared || targetSlideImage || !state.liveText) ? "" : state.liveText;
     const operatorTextWrapper = document.getElementById('operator-live-text-wrapper');
 
     if (!targetText) {
@@ -6338,7 +6963,7 @@ class ProPresenterApp {
     const opLtTitle = document.getElementById('operator-lower-third-title');
     const opLtSub = document.getElementById('operator-lower-third-subtitle');
     if (opLtBanner) {
-      if (!state.isOverlayCleared && state.isLowerThirdActive) {
+      if (!isStageModePlaying && !state.isOverlayCleared && state.isLowerThirdActive) {
         if (opLtTitle) opLtTitle.textContent = state.lowerThirdText || "";
         if (opLtSub) opLtSub.textContent = state.lowerThirdSubtext || "";
         opLtBanner.style.transform = 'translateX(0)';

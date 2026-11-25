@@ -51,6 +51,14 @@
       transform: scale(1.15);
       z-index: 2;
     }
+
+    #videowall-stage-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000000;
+      z-index: 3;
+    }
   </style>
 </head>
 
@@ -61,12 +69,16 @@
   <!-- Capa 2: Capa Ambiental (Modo Blur para Imágenes / Anuncios / Placas) -->
   <img id="videowall-ambient" class="videowall-layer" alt="" />
 
+  <!-- Capa 3: Imagen Directa asignada explícitamente desde el Módulo Stage -->
+  <img id="videowall-stage-image" class="videowall-layer" alt="" />
+
   <script type="module">
     import { BroadcastSync } from './src/js/broadcast.js';
 
     const sync = new BroadcastSync(false);
     const videoEl = document.getElementById('videowall-video');
     const ambientEl = document.getElementById('videowall-ambient');
+    const stageImgEl = document.getElementById('videowall-stage-image');
 
     // Siempre silenciado para evitar audio duplicado con audience.html
     videoEl.muted = true;
@@ -79,6 +91,9 @@
     let hasQueuedMedia = false;
     let lastMediaCommandId = null;
     let pauseVideoTimeout = null;
+    let isStageMediaActive = false;
+    let currentStageSyncTimestamp = 0;
+    let currentStageSecondarySrc = "";
 
     function isMediaImage(url, type = "") {
       if (type && type.startsWith('image/')) return true;
@@ -107,6 +122,7 @@
     function fadeOutToBlackout() {
       videoEl.style.opacity = '0';
       ambientEl.style.opacity = '0';
+      if (stageImgEl) stageImgEl.style.opacity = '0';
       scheduleVideoPauseAfterFade();
     }
 
@@ -115,11 +131,15 @@
       lastMediaCommandId = cmd.id;
 
       if (cmd.action === 'stop') {
+        videoEl.pause();
+        try {
+          videoEl.currentTime = 0;
+        } catch (e) {}
         fadeOutToBlackout();
         return;
       }
 
-      if (!currentVideoUrl || videoEl.style.opacity === '0') return;
+      if ((!currentVideoUrl && !currentStageSecondarySrc) || videoEl.style.opacity === '0') return;
 
       if (cmd.action === 'seek' && typeof cmd.time === 'number' && !isNaN(cmd.time)) {
         try {
@@ -162,6 +182,97 @@
       const shouldLoop = !hasQueuedMedia;
 
       videoEl.playbackRate = playbackRate;
+
+      // MODO STAGE: Prioridad a stageMedia.secondaryVideo sobre fondos normales y videowallImageMode
+      const stageMedia = (state.stageMedia && state.stageMedia.active) ? state.stageMedia : null;
+      if (stageMedia) {
+        isStageMediaActive = true;
+        currentVideoUrl = "";
+        currentMediaPlayId = 0;
+        cancelPendingVideoPause();
+        ambientEl.style.opacity = '0';
+
+        const secVideo = stageMedia.secondaryVideo;
+        const secSrc = (secVideo && typeof secVideo.src === 'string') ? secVideo.src : "";
+        const secLoop = secVideo?.loop !== false;
+        const secIsImage = Boolean(
+          secVideo?.isImage ||
+          (secVideo?.type && secVideo.type.startsWith('image/')) ||
+          isMediaImage(secSrc, secVideo?.type)
+        );
+
+        videoEl.loop = secLoop;
+        videoEl.muted = true;
+
+        if (!secSrc) {
+          fadeOutToBlackout();
+          currentStageSecondarySrc = "";
+        } else if (secIsImage) {
+          // Imagen asignada directamente al monitor secundario (Videowall) desde Stage
+          currentStageSyncTimestamp = stageMedia.syncTimestamp || 0;
+          currentStageSecondarySrc = secSrc;
+          if (stageImgEl) {
+            if (stageImgEl.getAttribute('src') !== secSrc) {
+              stageImgEl.src = secSrc;
+            }
+            stageImgEl.style.opacity = '1';
+          }
+          videoEl.style.opacity = '0';
+          scheduleVideoPauseAfterFade();
+        } else {
+          if (stageImgEl) stageImgEl.style.opacity = '0';
+          const isSameStageSecondary =
+            stageMedia.syncTimestamp === currentStageSyncTimestamp &&
+            secSrc === currentStageSecondarySrc;
+
+          // Si cambia únicamente mainVideo.src (por avance de la cola superior) pero secondaryVideo.src y syncTimestamp no cambiaron, NO reiniciar
+          if (!isSameStageSecondary) {
+            currentStageSyncTimestamp = stageMedia.syncTimestamp || 0;
+            currentStageSecondarySrc = secSrc;
+
+            videoEl.src = secSrc;
+            videoEl.currentTime = 0;
+            videoEl.loop = secLoop;
+            videoEl.muted = true;
+            videoEl.playbackRate = playbackRate;
+            videoEl.style.opacity = '1';
+
+            if (state.isMediaPaused) {
+              videoEl.pause();
+            } else {
+              const playPromise = videoEl.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(() => {
+                  videoEl.muted = true;
+                  videoEl.play().catch(() => {});
+                });
+              }
+            }
+          } else {
+            videoEl.style.opacity = '1';
+            if (state.isMediaPaused) {
+              if (!videoEl.paused) videoEl.pause();
+            } else if (videoEl.paused) {
+              videoEl.play().catch(() => {});
+            }
+          }
+        }
+
+        if (state.mediaPlaybackCommand) {
+          executeMediaCommand(state.mediaPlaybackCommand);
+        }
+        return;
+      }
+
+      if (isStageMediaActive) {
+        isStageMediaActive = false;
+        currentStageSyncTimestamp = 0;
+        currentStageSecondarySrc = "";
+        currentVideoUrl = "";
+        currentMediaPlayId = 0;
+        if (stageImgEl) stageImgEl.style.opacity = '0';
+      }
+
       videoEl.loop = shouldLoop;
 
       const targetUrl = typeof state.activeVideoUrl === 'string' ? state.activeVideoUrl : '';

@@ -1228,6 +1228,105 @@ test('RF-65: Gestión de Imágenes y Anuncios en Videowall (videowallImageMode: 
   }
 });
 
+console.log('\n▶️ Grupo 20: Módulo Stage — Reproductor Dual Sincronizado (RF-66)');
+
+test('RF-66: Docks superior/inferior, cola Alt+Click, disparo simultáneo stageMedia, auto-avance y desactivación al volver a canción/blackout', () => {
+  const fs = require('node:fs');
+  const store = new Store();
+  store.clearStageSelections();
+
+  const [main1, main2, main3] = store.addStageMediaBatch('main', [
+    { id: 'st-m1', name: 'Intro Película.mp4', url: 'file:///C:/stage/intro.mp4', duration: 30 },
+    { id: 'st-m2', name: 'Clip Principal.mp4', url: 'file:///C:/stage/clip.mp4', duration: 120 },
+    { id: 'st-m3', name: 'Cierre.mp4', url: 'file:///C:/stage/outro.mp4', duration: 45 }
+  ]);
+  const [sec1] = store.addStageMediaBatch('secondary', [
+    { id: 'st-s1', name: 'Loop Videowall LED.mp4', url: 'file:///C:/stage/led-loop.mp4', duration: 20 }
+  ]);
+
+  // 1. "Enviar a pantallas" deshabilitado hasta tener selección válida en ambos docks
+  if (store.canDispatchStage() !== false) {
+    throw new Error('canDispatchStage() debe ser false cuando no hay selección en ambos docks.');
+  }
+  store.selectStageMainVideo(main1.id);
+  if (store.canDispatchStage() !== false) {
+    throw new Error('canDispatchStage() debe seguir en false si falta seleccionar el video secundario.');
+  }
+  store.selectStageSecondaryVideo(sec1.id);
+  if (store.canDispatchStage() !== true) {
+    throw new Error('canDispatchStage() debe ser true cuando hay selección en dock superior e inferior.');
+  }
+
+  // 2. Armado de cola con Alt + Click en Dock Superior y recálculo al quitar un ítem
+  store.toggleStageMainQueueItem(main1.id);
+  store.toggleStageMainQueueItem(main2.id);
+  store.toggleStageMainQueueItem(main3.id);
+  if (store.state.stageMainQueue.length !== 3 || store.state.stageMainSelectedId !== null) {
+    throw new Error('toggleStageMainQueueItem debe armar la cola de 3 videos y limpiar la selección simple.');
+  }
+
+  // Alt + Click sobre un video ya encolado (main2) lo quita y recalcula índices [main1, main3]
+  store.toggleStageMainQueueItem(main2.id);
+  if (store.state.stageMainQueue.length !== 2 || store.state.stageMainQueue[0] !== main1.id || store.state.stageMainQueue[1] !== main3.id) {
+    throw new Error('Alt+Click sobre un video ya en la cola debe quitarlo y recalcular índices.');
+  }
+
+  // Clic normal limpia la cola previa y deja selección única; volvemos a armar cola [main1, main2] para probar disparo y avance
+  store.selectStageMainVideo(main1.id);
+  if (store.state.stageMainQueue.length !== 0 || store.state.stageMainSelectedId !== main1.id) {
+    throw new Error('Clic normal (selectStageMainVideo) debe limpiar la cola previa y dejar ese único video seleccionado.');
+  }
+  store.toggleStageMainQueueItem(main1.id);
+  store.toggleStageMainQueueItem(main2.id);
+
+  // 3. Disparo simultáneo ("Enviar a pantallas")
+  const dispatched = store.dispatchStageToScreens();
+  if (!dispatched || !dispatched.active) {
+    throw new Error('dispatchStageToScreens() debe activar stageMedia.active = true.');
+  }
+  if (dispatched.mainVideo?.src !== main1.url || dispatched.secondaryVideo?.src !== sec1.url || dispatched.secondaryVideo?.loop !== true) {
+    throw new Error('dispatchStageToScreens() debe asignar mainVideo (#1 de la cola) y secondaryVideo (loop: true).');
+  }
+  const initialSyncTs = dispatched.syncTimestamp;
+
+  // 4. Avance automático de cola al recibir MEDIA_ENDED sin reiniciar secondaryVideo
+  const nextPlayed = store.advanceStageMainQueue();
+  if (!nextPlayed || store.state.stageMedia.mainVideo?.src !== main2.url) {
+    throw new Error('advanceStageMainQueue() debe avanzar al video #2 en audience.html.');
+  }
+  if (store.state.stageMedia.syncTimestamp !== initialSyncTs || store.state.stageMedia.secondaryVideo?.src !== sec1.url) {
+    throw new Error('Al avanzar la cola principal, syncTimestamp y secondaryVideo.src no deben cambiar para no reiniciar el videowall.');
+  }
+
+  // 5. Finalización del último video de la cola
+  const afterLast = store.advanceStageMainQueue();
+  if (afterLast !== null || store.state.stageMedia.mainVideo !== null || store.state.stageQueueFinished !== true) {
+    throw new Error('Al terminar el último video de la cola, mainVideo debe quedar en null y stageQueueFinished en true.');
+  }
+
+  // 6. Proyectar una canción, versículo o activar Blackout desactiva stageMedia.active = false
+  store.dispatchStageToScreens();
+  if (!store.state.stageMedia.active) throw new Error('stageMedia debería estar activo tras nuevo disparo.');
+  store.setLiveSlide(0, 0);
+  if (store.state.stageMedia.active !== false) {
+    throw new Error('Proyectar una diapositiva de canción/show debe desactivar stageMedia.active = false.');
+  }
+
+  store.dispatchStageToScreens();
+  store.clearAll();
+  if (store.state.stageMedia.active !== false) {
+    throw new Error('Activar Blackout (clearAll) debe desactivar stageMedia.active = false.');
+  }
+
+  // Verificar soporte de stageMedia en audience.html, videowall.html e index.html
+  const audHtml = fs.readFileSync(path.join(projectRootDir, 'audience.html'), 'utf8');
+  const vwHtml = fs.readFileSync(path.join(projectRootDir, 'videowall.html'), 'utf8');
+  const idxHtml = fs.readFileSync(path.join(projectRootDir, 'index.html'), 'utf8');
+  if (!audHtml.includes('state.stageMedia') || !vwHtml.includes('state.stageMedia') || !idxHtml.includes('btn-stage-send-screens')) {
+    throw new Error('audience.html, videowall.html e index.html deben integrar stageMedia y btn-stage-send-screens.');
+  }
+});
+
 
 // ----------------------------------------------------
 // RESUMEN FINAL
