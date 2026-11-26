@@ -4,6 +4,35 @@ Todas las novedades, mejoras y correcciones de errores importantes de **CapyWors
 
 ---
 
+## 🚀 Versión 3.1.0 (Módulo "Combinación" con Árbol de Carpetas, Colas + Loop Principal, Control de Columnas y Optimización de Performance) — *25 de Noviembre, 2026*
+
+Esta actualización menor (**v3.1.0**) incorpora mejoras clave de usabilidad y control en el módulo de reproducción dual (renombrado a **Combinación**), controles claros para **Encender / Apagar Columnas**, reproducción en bucle (**Loop Principal**) y una optimización integral de velocidad de arranque y rendimiento en tiempo real.
+
+### ✨ Novedades y Mejoras Principales
+
+#### 🎛️ Módulo "Combinación" con Estructura en Árbol de Carpetas
+- **Pestaña Superior `Combinación`:** El botón superior `Stage` pasa a llamarse **`Combinación`**, reflejando su función de combinar contenidos independientes entre la **Salida 1 — Pantalla Principal (Audiencia)** y la **Salida 2 — Pantalla Secundaria (Columnas)**.
+- **Árbol de Carpetas en Ambos Docks:** Tanto el dock superior como el inferior ahora cuentan con el panel lateral de **Carpetas de Medios** (Carpetas Virtuales y Carpetas Físicas `LIVE` en disco) idéntico a la vista normal, evitando mezclar todos los videos en una sola lista plana y permitiendo filtrar y buscar dentro de la carpeta seleccionada en cada salida de manera independiente.
+- **Control Directo de Columnas:** El botón de activación de la segunda salida nativa en la barra superior pasa a llamarse **"Encender Columnas" / "Apagar Columnas"** para mayor claridad operativa.
+
+#### 🔁 Colas de Reproducción Mejoradas y Botón "Loop Principal: ON / OFF" en Combinación
+- **Armado Intuitivo de Colas (`+ Cola`, `Alt + Click`, `Ctrl + Click`, `Shift + Click`):**
+  - Cada tarjeta del Dock Superior (**Salida 1 — Pantalla Principal**) incluye ahora un botón directo **`+ Cola` / `✓ Cola #N`** en la esquina superior derecha para agregar o quitar videos con un solo clic sin depender del teclado.
+  - Al tener un video seleccionado con clic normal y agregar un segundo video con `+ Cola` o `Alt + Click`, el primer video se conserva automáticamente como `#1` de la cola y el nuevo pasa a `#2`.
+- **Tira Visual de Cola Activa y Salto Directo:** En la barra central de **Combinación** se despliega la lista ordenada de videos encolados (`1`, `2`, `3`...), permitiendo saltar a cualquier elemento con un clic, quitar elementos individuales (`×`) o avanzar manualmente con el botón **Siguiente en Cola**.
+- **Sincronización IPC Nativa de Fin de Video (`media-ended`):** El evento de finalización de video desde `audience.html` ahora se transmite también por IPC nativo de Electron además de `BroadcastChannel`, garantizando el auto-avance fiable entre ventanas locales.
+- **Nuevo Botón `Loop Principal: ON / OFF`:**
+  - Con **1 solo video** seleccionado en la Pantalla Principal: si `Loop Principal` está en **ON**, el video se repite en bucle continuo (`video.loop = true`).
+  - Con una **cola de varios videos** (`1 ➔ 2 ➔ 3`): si `Loop Principal` está en **ON**, al finalizar el último video de la cola reinicia automáticamente desde el video `#1` en bucle continuo. Si la cola ya había terminado y se activa el botón en vivo, se reanuda de inmediato.
+
+#### ⚡ Optimización Integral de Performance y Velocidad de Arranque
+- **Arranque Ultrarrápido (~0.5s):** La ventana principal se revela inmediatamente tras el primer frame de interfaz mientras la hidratación de miniaturas y carpetas físicas corre en segundo plano en un solo lote, sin lecturas síncronas bloqueantes de disco cuando `localStorage` ya está inicializado.
+- **Persistencia Asíncrona con Debounce:** El respaldo automático en disco (`capyworship-database.json` y `Documents/CapyWorship/capyworship-database-backup.json`) ahora utiliza *debounce* y escritura asíncrona (`fs.promises.writeFile`), reservando la escritura síncrona únicamente para el cierre de la aplicación (`will-quit`).
+- **Caché de DOM y Sondeo Controlado de Videos:** `renderStageDualView()` solo se ejecuta cuando la vista **Combinación** está activa, actualiza selecciones y badges *in-place* sin reconstruir el DOM y limita el sondeo de duración de videos a una cola de máximo 2 archivos en paralelo.
+- **Carga Diferida de PDF.js y Caché de Íconos:** `pdfjs-dist` (`~458 KB`) se carga bajo demanda solo al importar un PDF/presentación y los íconos SVG de Lucide se sirven desde caché en memoria (`_iconSvgCache`).
+
+---
+
 ## 🚀 Versión 3.0.0 (Segunda Salida Nativa para Videowall, Modos de Imágenes/Anuncios y Consolidación CapyWorship) — *25 de Noviembre, 2026*
 
 Esta versión mayor (**v3.0.0**) introduce la **Segunda Salida Nativa para Videowall (`videowall.html`)** junto con el sistema inteligente de **Gestión de Imágenes y Anuncios en Videowall** y consolida oficialmente el nombre del software y del repositorio bajo la identidad **CapyWorship**.

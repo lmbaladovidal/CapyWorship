@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CapyWorship — Tech for the Kingdom</title>
   <link rel="icon" type="image/png" href="./icon.png" />
-  <script type="module" crossorigin src="./assets/main-l8wnEyW6.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/broadcast-DCzxmwYx.js">
-  <link rel="stylesheet" crossorigin href="./assets/main-DbbucXhu.css">
+  <script type="module" crossorigin src="./assets/main-PZFUGoLa.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/broadcast-B8d_AC2n.js">
+  <link rel="stylesheet" crossorigin href="./assets/main-trsM0eE1.css">
 </head>
 <body>
   <div id="app">
@@ -48,12 +48,12 @@
           <span>Edit</span>
         </button>
 
-        <button class="mode-tab" data-mode="stage" title="Reproductor Dual Sincronizado (Pantalla Principal + Videowall)">
+        <button class="mode-tab" data-mode="stage" title="Combinación — Reproductor Dual Sincronizado (Pantalla Principal + Columnas)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="4" y="4" width="16" height="16" rx="2"></rect>
             <rect x="9" y="9" width="6" height="6"></rect>
           </svg>
-          <span>Stage</span>
+          <span>Combinación</span>
         </button>
       </nav>
 
@@ -95,10 +95,10 @@
                 <option value="blur">Color ambiental (Blur)</option>
               </select>
             </div>
-            <button id="btn-toggle-videowall" class="btn-output btn-videowall-toggle" title="Abrir / Cerrar Videowall (Solo Videos)" aria-pressed="false">
+            <button id="btn-toggle-videowall" class="btn-output btn-videowall-toggle" title="Encender / Apagar Columnas (Solo Videos)" aria-pressed="false">
               <span id="videowall-status-dot" class="videowall-status-dot" aria-hidden="true"></span>
               <i data-lucide="film"></i>
-              <span id="lbl-toggle-videowall">Abrir Videowall</span>
+              <span id="lbl-toggle-videowall">Encender Columnas</span>
             </button>
           </div>
 
@@ -179,7 +179,7 @@
         </div>
       </section>
 
-      <!-- Vista Módulo Stage: Reproductor Dual Sincronizado (Pantalla Principal + Videowall) -->
+      <!-- Vista Módulo Combinación (Stage): Reproductor Dual Sincronizado con Árbol de Carpetas -->
       <section id="view-stage-dual" class="stage-dual-view" style="display: none;">
         <!-- 1. Dock Superior: Videos / Imágenes Pantalla Principal (audience.html) -->
         <div id="stage-dock-main" class="stage-dock stage-dock-upper">
@@ -193,27 +193,47 @@
                 </select>
               </div>
               <span class="stage-dock-hint">
-                <strong>Clic:</strong> Selección única • <strong>Alt + Click:</strong> Armar cola (1, 2, 3...)
+                <strong>Clic:</strong> Selección única • <strong>Botón "+ Cola" / Alt+Click / Ctrl+Click:</strong> Armar cola (1, 2, 3...)
               </span>
             </div>
             <div class="stage-dock-actions">
-              <button type="button" id="btn-stage-copy-from-media-main" class="btn-output btn-stage-import-sec" title="Traer videos e imágenes de la Galería Media hacia este dock">
-                <i data-lucide="folder-input"></i>
-                <span>Traer de Media</span>
+              <button type="button" id="btn-stage-main-loop" class="btn-output btn-stage-loop-toggle" aria-pressed="false" title="Habilitar o deshabilitar el Loop (repetición en bucle) de los videos o la cola de la Pantalla Principal">
+                <i data-lucide="repeat"></i>
+                <span id="lbl-stage-main-loop">Loop Principal: OFF</span>
               </button>
-              <button type="button" id="btn-stage-add-main-video" class="btn-create-show-dock btn-stage-import-main" title="Importar videos o imágenes para enviar al monitor de Pantalla Principal">
+              <div class="stage-dock-search-box">
+                <i data-lucide="search"></i>
+                <input type="text" id="input-stage-main-search" placeholder="Buscar en carpeta..." autocomplete="off" />
+                <button type="button" id="btn-clear-stage-main-search" class="btn-clear-search-input" style="display: none;" title="Limpiar búsqueda">&times;</button>
+              </div>
+              <span id="lbl-stage-main-folder-info" class="stage-folder-info-tag">Carpeta: General</span>
+              <button type="button" id="btn-stage-add-main-video" class="btn-create-show-dock btn-stage-import-main" title="Importar videos o imágenes a la carpeta seleccionada">
                 <i data-lucide="plus"></i>
-                <span>Importar Video / Imagen</span>
+                <span>Cargar Video / Imagen</span>
               </button>
               <input type="file" id="input-stage-main-files" accept="video/*,image/*" multiple style="display: none;" />
             </div>
           </div>
-          <div id="stage-main-grid" class="stage-video-grid">
-            <!-- Dynamically populated main video/image cards -->
+          <div class="stage-dock-split-body">
+            <aside class="stage-folder-tree-sidebar">
+              <div class="folders-header-row">
+                <span class="folders-header">Carpetas de Medios</span>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <button type="button" id="btn-stage-main-add-phys-folder" class="btn-add-folder btn-add-phys-folder" title="Vincular Carpeta Física del Disco (Tiempo Real)"><i data-lucide="hard-drive"></i></button>
+                  <button type="button" id="btn-stage-main-add-virt-folder" class="btn-add-folder" title="Crear Nueva Carpeta Virtual"><i data-lucide="plus"></i></button>
+                </div>
+              </div>
+              <div id="stage-main-folders-list" class="folder-list">
+                <!-- Dynamically populated folder tree for Dock Superior -->
+              </div>
+            </aside>
+            <div id="stage-main-grid" class="stage-video-grid">
+              <!-- Dynamically populated main video/image cards for selected folder -->
+            </div>
           </div>
         </div>
 
-        <!-- Barra de Acción Central del Módulo Stage -->
+        <!-- Barra de Acción Central del Módulo Combinación -->
         <div class="stage-dual-action-bar">
           <div class="stage-selection-summary" id="stage-selection-summary">
             <div class="stage-summary-item">
@@ -222,19 +242,26 @@
             </div>
             <span class="stage-summary-sep">➔</span>
             <div class="stage-summary-item">
-              <span id="lbl-stage-target-secondary" class="stage-summary-label">Secundaria (Monitor 3):</span>
+              <span id="lbl-stage-target-secondary" class="stage-summary-label">Columnas (Monitor 3):</span>
               <strong id="lbl-stage-summary-secondary" class="stage-summary-val">Sin selección</strong>
             </div>
             <span id="badge-stage-live-status" class="stage-live-status-pill" style="display: none;">EN REPRODUCCIÓN</span>
           </div>
+          <div id="stage-main-queue-strip" class="stage-main-queue-strip" style="display: none;">
+            <!-- Dynamically populated ordered queue chips -->
+          </div>
           <div class="stage-action-buttons">
+            <button type="button" id="btn-stage-queue-next" class="btn-output btn-stage-next-queue" style="display: none;" title="Avanzar inmediatamente al siguiente video de la cola en la Pantalla Principal">
+              <i data-lucide="skip-forward"></i>
+              <span>Siguiente en Cola</span>
+            </button>
             <button type="button" id="btn-stage-clear-selection" class="btn-output btn-stage-clear" title="Resetear selección de ambos docks y vaciar la cola">
               <i data-lucide="rotate-ccw"></i>
               <span>Limpiar selección / Cola</span>
             </button>
-            <button type="button" id="btn-stage-stop-playback" class="btn-output btn-stage-stop" style="display: none;" title="Detener reproducción dual de Stage">
+            <button type="button" id="btn-stage-stop-playback" class="btn-output btn-stage-stop" style="display: none;" title="Detener reproducción dual de Combinación">
               <i data-lucide="square"></i>
-              <span>Detener Stage</span>
+              <span>Detener Combinación</span>
             </button>
             <button type="button" id="btn-stage-send-screens" class="btn-stage-send" disabled title="Selecciona al menos 1 video/imagen en el Dock Superior y 1 video/imagen en el Dock Inferior para habilitar">
               <i data-lucide="play"></i>
@@ -243,14 +270,14 @@
           </div>
         </div>
 
-        <!-- 2. Dock Inferior: Videos / Imágenes Pantalla Secundaria (videowall.html) -->
+        <!-- 2. Dock Inferior: Videos / Imágenes Pantalla Secundaria / Columnas (videowall.html) -->
         <div id="stage-dock-secondary" class="stage-dock stage-dock-lower">
           <div class="stage-dock-header">
             <div class="stage-dock-title-group">
-              <span class="stage-dock-badge badge-stage-secondary"><i data-lucide="film"></i> SALIDA 2 — PANTALLA SECUNDARIA (VIDEOWALL)</span>
+              <span class="stage-dock-badge badge-stage-secondary"><i data-lucide="film"></i> SALIDA 2 — PANTALLA SECUNDARIA (COLUMNAS)</span>
               <div class="stage-monitor-target-pill stage-monitor-target-secondary" title="Elige a qué monitor físico se enviará el video o imagen de este dock">
                 <span class="stage-monitor-target-label"><i data-lucide="monitor"></i> Enviar a:</span>
-                <select id="select-stage-secondary-display" class="select-stage-dock-display" title="Monitor de destino para el Dock Inferior (Videowall)">
+                <select id="select-stage-secondary-display" class="select-stage-dock-display" title="Monitor de destino para el Dock Inferior (Columnas / Videowall)">
                   <option value="">Monitor 3</option>
                 </select>
               </div>
@@ -259,19 +286,35 @@
               </span>
             </div>
             <div class="stage-dock-actions">
-              <button type="button" id="btn-stage-copy-from-media-secondary" class="btn-output btn-stage-import-sec" title="Traer videos e imágenes de la Galería Media hacia este dock">
-                <i data-lucide="folder-input"></i>
-                <span>Traer de Media</span>
-              </button>
-              <button type="button" id="btn-stage-add-secondary-video" class="btn-create-show-dock btn-stage-import-videowall" title="Importar videos o imágenes para enviar al monitor de Videowall">
+              <div class="stage-dock-search-box">
+                <i data-lucide="search"></i>
+                <input type="text" id="input-stage-secondary-search" placeholder="Buscar en carpeta..." autocomplete="off" />
+                <button type="button" id="btn-clear-stage-secondary-search" class="btn-clear-search-input" style="display: none;" title="Limpiar búsqueda">&times;</button>
+              </div>
+              <span id="lbl-stage-secondary-folder-info" class="stage-folder-info-tag">Carpeta: General</span>
+              <button type="button" id="btn-stage-add-secondary-video" class="btn-create-show-dock btn-stage-import-videowall" title="Importar videos o imágenes a la carpeta seleccionada">
                 <i data-lucide="plus"></i>
-                <span>Importar Video / Imagen</span>
+                <span>Cargar Video / Imagen</span>
               </button>
               <input type="file" id="input-stage-secondary-files" accept="video/*,image/*" multiple style="display: none;" />
             </div>
           </div>
-          <div id="stage-secondary-grid" class="stage-video-grid">
-            <!-- Dynamically populated secondary video/image cards -->
+          <div class="stage-dock-split-body">
+            <aside class="stage-folder-tree-sidebar">
+              <div class="folders-header-row">
+                <span class="folders-header">Carpetas de Medios</span>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <button type="button" id="btn-stage-sec-add-phys-folder" class="btn-add-folder btn-add-phys-folder" title="Vincular Carpeta Física del Disco (Tiempo Real)"><i data-lucide="hard-drive"></i></button>
+                  <button type="button" id="btn-stage-sec-add-virt-folder" class="btn-add-folder" title="Crear Nueva Carpeta Virtual"><i data-lucide="plus"></i></button>
+                </div>
+              </div>
+              <div id="stage-secondary-folders-list" class="folder-list">
+                <!-- Dynamically populated folder tree for Dock Inferior -->
+              </div>
+            </aside>
+            <div id="stage-secondary-grid" class="stage-video-grid">
+              <!-- Dynamically populated secondary video/image cards for selected folder -->
+            </div>
           </div>
         </div>
       </section>

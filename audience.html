@@ -208,6 +208,7 @@
     let mediaOperationToken = 0;
     let isStageMediaActive = false;
     let currentStageSyncTimestamp = 0;
+    let currentStagePlayInstanceId = 0;
     let currentStageMainSrc = "";
     let currentStageQueueIdx = -1;
 
@@ -257,7 +258,8 @@
     });
 
     const handleVideoEnded = (videoEl) => {
-      if (videoEl.style.opacity === '1' && (hasQueuedMedia || isStageMediaActive)) {
+      const isActiveVid = videoEl === getActiveAudienceVideo() || videoEl.style.opacity === '1';
+      if (isActiveVid && !videoEl.loop && (hasQueuedMedia || isStageMediaActive)) {
         sync.notifyMediaEnded(isStageMediaActive ? currentStageMainSrc : currentVideoUrl);
       }
     };
@@ -276,6 +278,10 @@
 
         // Ocultar textos, letras, placas y overlays habituales
         if (fadeTimeout) clearTimeout(fadeTimeout);
+        if (window.audienceMediaFadeTimeout) {
+          clearTimeout(window.audienceMediaFadeTimeout);
+          window.audienceMediaFadeTimeout = null;
+        }
         textEl.classList.add('cleared');
         textEl.style.opacity = '0';
         currentLiveText = "";
@@ -293,6 +299,7 @@
         const playbackRate = typeof state.mediaPlaybackRate === 'number'
           ? Math.max(0.25, Math.min(2.0, state.mediaPlaybackRate))
           : 1.0;
+        const shouldLoopStageMain = Boolean(stageMedia.mainVideo?.loop);
 
         bgVideoA.muted = isAudioMuted;
         bgVideoB.muted = isAudioMuted;
@@ -300,8 +307,8 @@
         bgVideoB.volume = audioVolume;
         bgVideoA.playbackRate = playbackRate;
         bgVideoB.playbackRate = playbackRate;
-        bgVideoA.loop = false;
-        bgVideoB.loop = false;
+        bgVideoA.loop = shouldLoopStageMain;
+        bgVideoB.loop = shouldLoopStageMain;
 
         const mainSrc = stageMedia.mainVideo && typeof stageMedia.mainVideo.src === 'string'
           ? stageMedia.mainVideo.src
@@ -312,6 +319,7 @@
           (mainSrc && (mainSrc.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i) || mainSrc.startsWith('data:image/')))
         );
         const incomingQueueIdx = typeof stageMedia.queueIndex === 'number' ? stageMedia.queueIndex : -1;
+        const incomingPlayInstanceId = stageMedia.playInstanceId || stageMedia.syncTimestamp || 0;
 
         if (!mainSrc) {
           // Fin de la cola o sin medio principal activo -> pantalla principal en negro limpio
@@ -329,6 +337,7 @@
           currentStageMainSrc = "";
         } else if (
           stageMedia.syncTimestamp !== currentStageSyncTimestamp ||
+          incomingPlayInstanceId !== currentStagePlayInstanceId ||
           mainSrc !== currentStageMainSrc ||
           incomingQueueIdx !== currentStageQueueIdx
         ) {
@@ -338,6 +347,7 @@
             window.audienceClearVramTimeout = null;
           }
           currentStageSyncTimestamp = stageMedia.syncTimestamp || 0;
+          currentStagePlayInstanceId = incomingPlayInstanceId;
           currentStageMainSrc = mainSrc;
           currentStageQueueIdx = incomingQueueIdx;
 
@@ -364,7 +374,7 @@
             const incomingVideo = incomingMedia.video;
             incomingVideo.src = mainSrc;
             incomingVideo.currentTime = 0;
-            incomingVideo.loop = false;
+            incomingVideo.loop = shouldLoopStageMain;
             incomingVideo.muted = isAudioMuted;
             incomingVideo.volume = audioVolume;
             incomingVideo.playbackRate = playbackRate;
@@ -397,6 +407,7 @@
       if (isStageMediaActive) {
         isStageMediaActive = false;
         currentStageSyncTimestamp = 0;
+        currentStagePlayInstanceId = 0;
         currentStageMainSrc = "";
         currentStageQueueIdx = -1;
         currentVideoUrl = "";

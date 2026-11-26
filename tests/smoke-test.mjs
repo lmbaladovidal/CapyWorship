@@ -1271,13 +1271,15 @@ test('RF-66: Docks superior/inferior, cola Alt+Click, disparo simultáneo stageM
     throw new Error('Alt+Click sobre un video ya en la cola debe quitarlo y recalcular índices.');
   }
 
-  // Clic normal limpia la cola previa y deja selección única; volvemos a armar cola [main1, main2] para probar disparo y avance
+  // Clic normal limpia la cola previa y deja selección única; al hacer Alt+Click o "+ Cola" sobre main2, main1 se conserva como #1 y main2 pasa a #2
   store.selectStageMainVideo(main1.id);
   if (store.state.stageMainQueue.length !== 0 || store.state.stageMainSelectedId !== main1.id) {
     throw new Error('Clic normal (selectStageMainVideo) debe limpiar la cola previa y dejar ese único video seleccionado.');
   }
-  store.toggleStageMainQueueItem(main1.id);
   store.toggleStageMainQueueItem(main2.id);
+  if (store.state.stageMainQueue.length !== 2 || store.state.stageMainQueue[0] !== main1.id || store.state.stageMainQueue[1] !== main2.id) {
+    throw new Error('Al tener un video seleccionado con clic normal y hacer Alt+Click/+Cola en un segundo video, ambos deben quedar en la cola [main1, main2].');
+  }
 
   // 3. Disparo simultáneo ("Enviar a pantallas")
   const dispatched = store.dispatchStageToScreens();
@@ -1298,10 +1300,24 @@ test('RF-66: Docks superior/inferior, cola Alt+Click, disparo simultáneo stageM
     throw new Error('Al avanzar la cola principal, syncTimestamp y secondaryVideo.src no deben cambiar para no reiniciar el videowall.');
   }
 
-  // 5. Finalización del último video de la cola
+  // 4b. Loop de Pantalla Principal habilitado (stageMainLoop = true): al terminar el último video de la cola, vuelve al video #1
+  store.setStageMainLoop(true);
+  if (store.state.stageMainLoop !== true || store.state.stageMedia.mainLoop !== true) {
+    throw new Error('setStageMainLoop(true) debe activar stageMainLoop.');
+  }
+  const loopedToFirst = store.advanceStageMainQueue();
+  if (!loopedToFirst || store.state.stageActiveQueueIndex !== 0 || store.state.stageMedia.mainVideo?.src !== main1.url) {
+    throw new Error('Con Loop Principal activo, advanceStageMainQueue() al final de la cola debe reiniciar desde el video #1.');
+  }
+
+  // Avanzar nuevamente a #2 y desactivar Loop para probar fin de cola sin loop
+  store.advanceStageMainQueue();
+  store.setStageMainLoop(false);
+
+  // 5. Finalización del último video de la cola (con Loop desactivado)
   const afterLast = store.advanceStageMainQueue();
   if (afterLast !== null || store.state.stageMedia.mainVideo !== null || store.state.stageQueueFinished !== true) {
-    throw new Error('Al terminar el último video de la cola, mainVideo debe quedar en null y stageQueueFinished en true.');
+    throw new Error('Al terminar el último video de la cola sin loop, mainVideo debe quedar en null y stageQueueFinished en true.');
   }
 
   // 6. Proyectar una canción, versículo o activar Blackout desactiva stageMedia.active = false
@@ -1338,4 +1354,4 @@ console.log('====================================================\n');
 if (passedTests !== totalTests) {
   process.exit(1);
 }
-process.exit(0);
+setTimeout(() => process.exit(0), 30);

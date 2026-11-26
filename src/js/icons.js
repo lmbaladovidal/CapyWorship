@@ -22,6 +22,8 @@ export function toPascalCase(str) {
  * @param {string} [options.style=''] Estilo inline adicional
  * @returns {string} Markup HTML del SVG
  */
+const _iconSvgCache = new Map();
+
 export function iconSvg(name, {
   size = 14,
   strokeWidth = 2,
@@ -30,9 +32,14 @@ export function iconSvg(name, {
   style = ''
 } = {}) {
   if (!name) return '';
+  const cacheKey = `${name}|${size}|${strokeWidth}|${className}|${color}|${style}`;
+  const cached = _iconSvgCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   const pascal = toPascalCase(name);
   const iconNode = icons[pascal] || icons[name];
   if (!iconNode) {
+    _iconSvgCache.set(cacheKey, '');
     return '';
   }
 
@@ -46,7 +53,9 @@ export function iconSvg(name, {
   const classAttr = className ? ` class="${className}"` : '';
   const styleAttr = style ? ` style="${style}"` : '';
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"${classAttr}${styleAttr}>${innerSvg}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"${classAttr}${styleAttr}>${innerSvg}</svg>`;
+  _iconSvgCache.set(cacheKey, svg);
+  return svg;
 }
 
 /**

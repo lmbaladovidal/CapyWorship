@@ -486,9 +486,11 @@ export class Store {
       stageSecondarySelectedId: null,
       stageActiveQueueIndex: -1,
       stageQueueFinished: false,
+      stageMainLoop: getStorageItem("propresenter_stage_main_loop") === "true",
       stageMedia: {
         active: false,
         syncTimestamp: 0,
+        mainLoop: getStorageItem("propresenter_stage_main_loop") === "true",
         mainVideo: null,
         secondaryVideo: null
       }
@@ -496,38 +498,41 @@ export class Store {
 
     this.listeners = [];
 
-    // Auto-hidratar miniaturas y restaurar blobs persistentes desde IndexedDB
+    // Restaurar URLs de archivo local o blobs persistentes desde IndexedDB en un solo lote (las miniaturas se hidratan en lote vía getAllThumbnailsMap)
     const allMediaCollections = [
       this.state.mediaLibrary,
       this.state.stageMainLibrary,
       this.state.stageSecondaryLibrary
     ];
     if (typeof window !== 'undefined') {
+      const pendingBlobPromises = [];
       allMediaCollections.forEach(collection => {
         if (!Array.isArray(collection)) return;
         collection.forEach(item => {
-          if (!item.thumbnail && item.id) {
-            MediaCache.getThumbnail(item.id).then(t => {
-              if (t) {
-                item.thumbnail = t;
-                this.notify();
-              }
-            }).catch(() => { });
-          }
           if (item.url && item.url.startsWith('blob:')) {
             if (item.filePath) {
               item.url = 'file:///' + item.filePath.replace(/\\/g, '/');
-            } else {
-              MediaCache.getBlob(item.id).then(blob => {
-                if (blob) {
-                  item.url = URL.createObjectURL(blob);
-                  this.notify();
-                }
-              }).catch(() => { });
+            } else if (item.id) {
+              pendingBlobPromises.push(
+                MediaCache.getBlob(item.id).then(blob => {
+                  if (blob) {
+                    item.url = URL.createObjectURL(blob);
+                    return true;
+                  }
+                  return false;
+                }).catch(() => false)
+              );
             }
           }
         });
       });
+      if (pendingBlobPromises.length > 0) {
+        Promise.all(pendingBlobPromises).then(results => {
+          if (results.some(Boolean)) {
+            this.notify();
+          }
+        });
+      }
     }
 
     // Provider for new windows requesting current state on launch
@@ -589,6 +594,7 @@ export class Store {
     setStorageItem("propresenter_media_audio_volume", String(this.state.mediaAudioVolume));
     setStorageItem("propresenter_force_transparent_bg", String(!!this.state.forceTransparentBackground));
     setStorageItem("freepresenter_videowall_image_mode", this.state.videowallImageMode || "sticky");
+    setStorageItem("propresenter_stage_main_loop", String(!!this.state.stageMainLoop));
 
     if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.savePersistentStorageSnapshot === 'function') {
       window.electronAPI.savePersistentStorageSnapshot();
@@ -1591,7 +1597,7 @@ export class Store {
     return existing;
   }
 
-  syncPhysicalFolderItems(folderPath, folderName = "", files = []) {
+  syncPhysicalFolderItems(folderPath, folderName = "", files = [], shouldNotify = true) {
     if (!folderPath) return;
     const normalizedPath = folderPath.trim();
     const derivedName = folderName ? folderName.trim() : (normalizedPath.split(/[\\/]/).filter(Boolean).pop() || normalizedPath);
@@ -1657,7 +1663,9 @@ export class Store {
       }
     });
 
-    this.notify();
+    if (shouldNotify) {
+      this.notify();
+    }
   }
 
   removePhysicalMediaFolder(folderPath) {
@@ -1987,16 +1995,21 @@ export class Store {
   }
 
   updateStageMediaDuration(targetDock, itemId, durationSeconds) {
+    if (typeof durationSeconds !== 'number' || !isFinite(durationSeconds) || durationSeconds <= 0) return false;
     const isSecondary = targetDock === 'secondary';
-    const list = isSecondary ? this.state.stageSecondaryLibrary : this.state.stageMainLibrary;
-    if (!Array.isArray(list)) return;
-    const target = list.find(m => m.id === itemId);
-    if (target && typeof durationSeconds === 'number' && isFinite(durationSeconds) && durationSeconds > 0) {
-      if (Math.abs((target.duration || 0) - durationSeconds) > 0.2) {
+    const stageList = isSecondary ? this.state.stageSecondaryLibrary : this.state.stageMainLibrary;
+    let updated = false;
+
+    [stageList, this.state.mediaLibrary].forEach(list => {
+      if (!Array.isArray(list)) return;
+      const target = list.find(m => m && m.id === itemId);
+      if (target && Math.abs((target.duration || 0) - durationSeconds) > 0.2) {
         target.duration = durationSeconds;
-        this.notify();
+        updated = true;
       }
-    }
+    });
+
+    return updated;
   }
 
   deleteStageMediaItem(targetDock, itemId) {
@@ -2025,8 +2038,22 @@ export class Store {
     this.notify();
   }
 
+  getCombinedStagePool(targetDock = 'main') {
+    const isSecondary = targetDock === 'secondary';
+    const stageList = isSecondary ? (this.state.stageSecondaryLibrary || []) : (this.state.stageMainLibrary || []);
+    const mediaList = this.state.mediaLibrary || [];
+    const byId = new Map();
+    stageList.forEach(item => {
+      if (item && item.id) byId.set(item.id, item);
+    });
+    mediaList.forEach(item => {
+      if (item && item.id && !byId.has(item.id)) byId.set(item.id, item);
+    });
+    return Array.from(byId.values());
+  }
+
   selectStageMainVideo(itemId) {
-    const exists = (this.state.stageMainLibrary || []).some(m => m.id === itemId);
+    const exists = this.getCombinedStagePool('main').some(m => m.id === itemId);
     if (!exists) return null;
     // Clic normal: limpia la cola previa y deja ese único video seleccionado
     this.state.stageMainQueue = [];
@@ -2038,15 +2065,31 @@ export class Store {
   }
 
   toggleStageMainQueueItem(itemId) {
-    const exists = (this.state.stageMainLibrary || []).some(m => m.id === itemId);
+    const pool = this.getCombinedStagePool('main');
+    const exists = pool.some(m => m.id === itemId);
     if (!exists) return [];
 
     if (!Array.isArray(this.state.stageMainQueue)) {
       this.state.stageMainQueue = [];
     }
 
-    // Si había una selección simple previa y la cola estaba vacía, al hacer Alt+Click pasamos a modo cola
-    this.state.stageMainSelectedId = null;
+    // Si había una selección simple previa y la cola estaba vacía, conservar ese primer video como #1 en la cola
+    if (this.state.stageMainQueue.length === 0 && this.state.stageMainSelectedId) {
+      const prevSelectedId = this.state.stageMainSelectedId;
+      this.state.stageMainSelectedId = null;
+      if (pool.some(m => m.id === prevSelectedId)) {
+        this.state.stageMainQueue.push(prevSelectedId);
+        if (prevSelectedId === itemId) {
+          this.state.stageActiveQueueIndex = -1;
+          this.state.stageQueueFinished = false;
+          this.notify();
+          return [...this.state.stageMainQueue];
+        }
+      }
+    } else {
+      this.state.stageMainSelectedId = null;
+    }
+
     this.state.stageActiveQueueIndex = -1;
     this.state.stageQueueFinished = false;
 
@@ -2063,8 +2106,126 @@ export class Store {
     return [...this.state.stageMainQueue];
   }
 
+  removeStageMainQueueItemAt(indexOrId) {
+    if (!Array.isArray(this.state.stageMainQueue)) return [];
+    if (typeof indexOrId === 'number') {
+      if (indexOrId >= 0 && indexOrId < this.state.stageMainQueue.length) {
+        this.state.stageMainQueue.splice(indexOrId, 1);
+      }
+    } else {
+      const idx = this.state.stageMainQueue.indexOf(indexOrId);
+      if (idx !== -1) this.state.stageMainQueue.splice(idx, 1);
+    }
+    if (this.state.stageActiveQueueIndex >= this.state.stageMainQueue.length) {
+      this.state.stageActiveQueueIndex = Math.max(-1, this.state.stageMainQueue.length - 1);
+    }
+    this.notify();
+    return [...this.state.stageMainQueue];
+  }
+
+  playStageQueueIndexNow(targetIndex) {
+    if (!Array.isArray(this.state.stageMainQueue) || targetIndex < 0 || targetIndex >= this.state.stageMainQueue.length) {
+      return null;
+    }
+    const mainLib = this.getCombinedStagePool('main');
+    const targetId = this.state.stageMainQueue[targetIndex];
+    const targetItem = mainLib.find(m => m.id === targetId);
+    if (!targetItem) return null;
+
+    this.state.stageActiveQueueIndex = targetIndex;
+    this.state.stageQueueFinished = false;
+    this.state.isMediaPaused = false;
+    this.state.mediaPlaybackCommand = null;
+
+    if (this.state.stageMedia && this.state.stageMedia.active) {
+      const nextIsImg = Boolean(
+        targetItem.isImage ||
+        (targetItem.type && targetItem.type.startsWith('image/')) ||
+        /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(targetItem.url || '')
+      );
+      const isSingleItemLoop = Boolean(this.state.stageMainLoop && this.state.stageMainQueue.length <= 1);
+      this.state.stageMedia = {
+        ...this.state.stageMedia,
+        mainLoop: Boolean(this.state.stageMainLoop),
+        mainEnded: false,
+        queueIndex: targetIndex,
+        queueTotal: this.state.stageMainQueue.length,
+        playInstanceId: Date.now(),
+        mainVideo: {
+          id: targetItem.id,
+          src: targetItem.url,
+          name: targetItem.name,
+          type: targetItem.type || (nextIsImg ? 'image/png' : 'video/mp4'),
+          isImage: nextIsImg,
+          loop: isSingleItemLoop
+        }
+      };
+    }
+
+    this.notify();
+    return targetItem;
+  }
+
+  setStageMainLoop(enabled) {
+    this.state.stageMainLoop = Boolean(enabled);
+    setStorageItem("propresenter_stage_main_loop", String(this.state.stageMainLoop));
+
+    if (this.state.stageMedia && this.state.stageMedia.active) {
+      const mainLib = this.getCombinedStagePool('main');
+      const queueIds = (this.state.stageMainQueue || []).filter(id => mainLib.some(m => m.id === id));
+      const isSingleVideoLoop = Boolean(this.state.stageMainLoop && queueIds.length <= 1);
+
+      this.state.stageMedia = {
+        ...this.state.stageMedia,
+        mainLoop: this.state.stageMainLoop,
+        mainVideo: this.state.stageMedia.mainVideo
+          ? { ...this.state.stageMedia.mainVideo, loop: isSingleVideoLoop }
+          : null
+      };
+
+      // Si la pantalla principal ya había terminado y el usuario activa Loop, reanudar automáticamente
+      if (this.state.stageMainLoop && (this.state.stageQueueFinished || this.state.stageMedia.mainEnded || !this.state.stageMedia.mainVideo)) {
+        if (queueIds.length > 0) {
+          this.playStageQueueIndexNow(0);
+          return this.state.stageMainLoop;
+        } else if (this.state.stageMainSelectedId) {
+          const selItem = mainLib.find(m => m.id === this.state.stageMainSelectedId);
+          if (selItem) {
+            const isImg = Boolean(
+              selItem.isImage ||
+              (selItem.type && selItem.type.startsWith('image/')) ||
+              /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(selItem.url || '')
+            );
+            this.state.stageQueueFinished = false;
+            this.state.stageMedia = {
+              ...this.state.stageMedia,
+              mainLoop: true,
+              mainEnded: false,
+              playInstanceId: Date.now(),
+              mainVideo: {
+                id: selItem.id,
+                src: selItem.url,
+                name: selItem.name,
+                type: selItem.type || (isImg ? 'image/png' : 'video/mp4'),
+                isImage: isImg,
+                loop: true
+              }
+            };
+          }
+        }
+      }
+    }
+
+    this.notify();
+    return this.state.stageMainLoop;
+  }
+
+  toggleStageMainLoop() {
+    return this.setStageMainLoop(!this.state.stageMainLoop);
+  }
+
   selectStageSecondaryVideo(itemId) {
-    const exists = (this.state.stageSecondaryLibrary || []).some(m => m.id === itemId);
+    const exists = this.getCombinedStagePool('secondary').some(m => m.id === itemId);
     if (!exists) return null;
     this.state.stageSecondarySelectedId = itemId;
     this.notify();
@@ -2081,8 +2242,8 @@ export class Store {
   }
 
   canDispatchStage() {
-    const mainLib = this.state.stageMainLibrary || [];
-    const secLib = this.state.stageSecondaryLibrary || [];
+    const mainLib = this.getCombinedStagePool('main');
+    const secLib = this.getCombinedStagePool('secondary');
     const queue = Array.isArray(this.state.stageMainQueue) ? this.state.stageMainQueue : [];
 
     const hasValidMain = queue.length > 0
@@ -2099,8 +2260,8 @@ export class Store {
   dispatchStageToScreens() {
     if (!this.canDispatchStage()) return null;
 
-    const mainLib = this.state.stageMainLibrary || [];
-    const secLib = this.state.stageSecondaryLibrary || [];
+    const mainLib = this.getCombinedStagePool('main');
+    const secLib = this.getCombinedStagePool('secondary');
     const queueIds = (this.state.stageMainQueue || []).filter(id => mainLib.some(m => m.id === id));
 
     let firstMainItem = null;
@@ -2132,9 +2293,14 @@ export class Store {
       /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(secondaryItem.url || '')
     );
 
+    const isSingleItemLoop = Boolean(this.state.stageMainLoop && queueIds.length <= 1);
+
     this.state.stageMedia = {
       active: true,
       syncTimestamp: now,
+      playInstanceId: now,
+      mainLoop: Boolean(this.state.stageMainLoop),
+      mainEnded: false,
       queueIndex: this.state.stageActiveQueueIndex,
       queueTotal: queueIds.length,
       mainVideo: {
@@ -2142,7 +2308,8 @@ export class Store {
         src: firstMainItem.url,
         name: firstMainItem.name,
         type: firstMainItem.type || (mainIsImg ? 'image/png' : 'video/mp4'),
-        isImage: mainIsImg
+        isImage: mainIsImg,
+        loop: isSingleItemLoop
       },
       secondaryVideo: {
         id: secondaryItem.id,
@@ -2161,15 +2328,21 @@ export class Store {
   advanceStageMainQueue() {
     if (!this.state.stageMedia || !this.state.stageMedia.active) return null;
 
-    const mainLib = this.state.stageMainLibrary || [];
+    const mainLib = this.getCombinedStagePool('main');
     const queueIds = (this.state.stageMainQueue || []).filter(id => mainLib.some(m => m.id === id));
+    const loopEnabled = Boolean(this.state.stageMainLoop);
 
     if (queueIds.length > 0 && this.state.stageActiveQueueIndex >= 0) {
-      const nextIndex = this.state.stageActiveQueueIndex + 1;
+      let nextIndex = this.state.stageActiveQueueIndex + 1;
+      if (nextIndex >= queueIds.length && loopEnabled) {
+        // Si el Loop de Pantalla Principal está activo, reiniciar la cola desde el primer video (#1)
+        nextIndex = 0;
+      }
       if (nextIndex < queueIds.length) {
         const nextItem = mainLib.find(m => m.id === queueIds[nextIndex]);
         if (nextItem) {
           this.state.stageActiveQueueIndex = nextIndex;
+          this.state.stageQueueFinished = false;
           this.state.isMediaPaused = false;
           this.state.mediaPlaybackCommand = null;
           // Importante: conservar syncTimestamp y secondaryVideo intactos para que videowall.html NO reinicie su video
@@ -2178,8 +2351,12 @@ export class Store {
             (nextItem.type && nextItem.type.startsWith('image/')) ||
             /\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i.test(nextItem.url || '')
           );
+          const isSingleItemLoop = Boolean(loopEnabled && queueIds.length <= 1);
           this.state.stageMedia = {
             ...this.state.stageMedia,
+            mainLoop: loopEnabled,
+            mainEnded: false,
+            playInstanceId: Date.now(),
             queueIndex: nextIndex,
             queueTotal: queueIds.length,
             mainVideo: {
@@ -2187,21 +2364,40 @@ export class Store {
               src: nextItem.url,
               name: nextItem.name,
               type: nextItem.type || (nextIsImg ? 'image/png' : 'video/mp4'),
-              isImage: nextIsImg
+              isImage: nextIsImg,
+              loop: isSingleItemLoop
             }
           };
           this.notify();
           return nextItem;
         }
       }
+    } else if (loopEnabled && this.state.stageMedia.mainVideo) {
+      // Selección simple con Loop activo: mantener reproducción en bucle
+      this.state.stageQueueFinished = false;
+      this.state.isMediaPaused = false;
+      this.state.mediaPlaybackCommand = null;
+      this.state.stageMedia = {
+        ...this.state.stageMedia,
+        mainLoop: true,
+        mainEnded: false,
+        playInstanceId: Date.now(),
+        mainVideo: {
+          ...this.state.stageMedia.mainVideo,
+          loop: true
+        }
+      };
+      this.notify();
+      return this.state.stageMedia.mainVideo;
     }
 
-    // Si era el último video de la cola (o selección simple), detener limpiamente la pantalla principal y marcar cola como finalizada
+    // Si era el último video de la cola (o selección simple sin loop), detener limpiamente la pantalla principal y marcar cola como finalizada
     this.state.stageQueueFinished = true;
     this.state.isMediaPaused = false;
     this.state.mediaPlaybackCommand = null;
     this.state.stageMedia = {
       ...this.state.stageMedia,
+      mainLoop: loopEnabled,
       mainVideo: null,
       mainEnded: true
     };

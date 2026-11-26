@@ -5,11 +5,22 @@
  * y documentos PDF (.pdf), rasterizando páginas PDF con pdfjs-dist cuando corresponde
  * (PDF directo o conversión vía LibreOffice).
  */
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+let _pdfjsLibPromise = null;
 
-if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+async function getPdfJsLib() {
+  if (!_pdfjsLibPromise) {
+    _pdfjsLibPromise = Promise.all([
+      import('pdfjs-dist'),
+      import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+    ]).then(([pdfjsLib, workerMod]) => {
+      const workerUrl = workerMod?.default || workerMod;
+      if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions && workerUrl) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+      }
+      return pdfjsLib;
+    });
+  }
+  return _pdfjsLibPromise;
 }
 
 export const PRESENTATION_EXTENSIONS = ['pptx', 'ppt', 'pps', 'ppsx', 'pptm', 'potx', 'odp', 'pdf'];
@@ -76,6 +87,7 @@ export async function renderPdfSlides(pdfBytes, {
     ? pdfBytes
     : new Uint8Array(pdfBytes.buffer ? pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength) : pdfBytes);
 
+  const pdfjsLib = await getPdfJsLib();
   const loadingTask = pdfjsLib.getDocument({ data });
   const pdf = await loadingTask.promise;
   const total = pdf.numPages;

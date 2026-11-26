@@ -1,8 +1,8 @@
 # 🦫 CapyWorship — MULTIMEDIOS • Tech for the Kingdom
 
-> **Aplicación de escritorio nativa (`v3.0.0`) para transmisión en vivo, proyección en pantalla principal (Audiencia), segunda salida nativa para Videowall (Solo Videos + Modos Ambientales) y monitor de escenario (Stage Display) con gestor de escrituras, calendario de eventos e integración OBS / Resolume Arena.**
+> **Aplicación de escritorio nativa (`v3.1.0`) para transmisión en vivo, proyección en pantalla principal (Audiencia), segunda salida nativa para Videowall / Columnas (Solo Videos + Modos Ambientales), módulo de Combinación Dual y monitor de escenario (Stage Display) con gestor de escrituras, calendario de eventos e integración OBS / Resolume Arena.**
 
-![Version 3.0.0](https://img.shields.io/badge/Version-3.0.0-FF7A00.svg)
+![Version 3.1.0](https://img.shields.io/badge/Version-3.1.0-FF7A00.svg)
 ![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Electron](https://img.shields.io/badge/Electron-43.4.1-47848F?logo=electron&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5.4.21-646CFF?logo=vite&logoColor=white)

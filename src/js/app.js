@@ -138,21 +138,25 @@ class ProPresenterApp {
   }
 
   async finishStartupSequence() {
+    this.reportSplashStatus('Abriendo espacio de trabajo...', 92);
+    // Revelar la ventana principal de inmediato sin bloquear por escaneo de disco o IndexedDB
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        window.electronAPI?.notifyAppReady?.();
+      });
+    } else {
+      window.electronAPI?.notifyAppReady?.();
+    }
+
+    // Completar hidratación de miniaturas y carpetas físicas en segundo plano
     try {
-      this.reportSplashStatus('Hidratando caché de miniaturas y medios...', 74);
       if (this._mediaThumbHydrationPromise) {
         await this._mediaThumbHydrationPromise.catch(() => {});
       }
-
-      this.reportSplashStatus('Sincronizando carpetas físicas multimedia...', 88);
       if (this._physicalFoldersSyncPromise) {
         await this._physicalFoldersSyncPromise.catch(() => {});
       }
-
-      this.reportSplashStatus('Conectando pantallas y transmisión en vivo...', 95);
-    } finally {
-      window.electronAPI?.notifyAppReady?.();
-    }
+    } catch (_) {}
   }
 
   initDOM() {
@@ -311,10 +315,14 @@ class ProPresenterApp {
     const opVidA = document.getElementById('operator-video-preview-a');
     const opVidB = document.getElementById('operator-video-preview-b');
     opVidA?.addEventListener('ended', () => {
-      if (opVidA.style.opacity === '1') this.handleActiveVideoEnded();
+      if ((opVidA === this.getActiveOperatorVideo() || opVidA.style.opacity === '1') && !opVidA.loop) {
+        this.handleActiveVideoEnded();
+      }
     });
     opVidB?.addEventListener('ended', () => {
-      if (opVidB.style.opacity === '1') this.handleActiveVideoEnded();
+      if ((opVidB === this.getActiveOperatorVideo() || opVidB.style.opacity === '1') && !opVidB.loop) {
+        this.handleActiveVideoEnded();
+      }
     });
 
     const timelineEvents = ['timeupdate', 'loadedmetadata', 'durationchange', 'play', 'pause', 'seeked'];
@@ -426,8 +434,14 @@ class ProPresenterApp {
       this.updateMediaTimelineUI();
     });
 
-    document.getElementById('btn-dock-queue-next')?.addEventListener('click', () => store.advanceMediaQueue());
-    document.getElementById('btn-sidebar-queue-next')?.addEventListener('click', () => store.advanceMediaQueue());
+    document.getElementById('btn-dock-queue-next')?.addEventListener('click', () => {
+      if (store.state.stageMedia?.active) store.advanceStageMainQueue();
+      else store.advanceMediaQueue();
+    });
+    document.getElementById('btn-sidebar-queue-next')?.addEventListener('click', () => {
+      if (store.state.stageMedia?.active) store.advanceStageMainQueue();
+      else store.advanceMediaQueue();
+    });
     document.getElementById('btn-dock-queue-clear')?.addEventListener('click', () => store.clearMediaQueue());
     document.getElementById('btn-sidebar-queue-clear')?.addEventListener('click', () => store.clearMediaQueue());
 
@@ -1587,7 +1601,7 @@ class ProPresenterApp {
       dotEl.classList.toggle('active', this.isVideowallOpen);
     }
     if (lblToggle) {
-      lblToggle.textContent = this.isVideowallOpen ? 'Cerrar Videowall' : 'Abrir Videowall';
+      lblToggle.textContent = this.isVideowallOpen ? 'Apagar Columnas' : 'Encender Columnas';
     }
   }
 
@@ -2060,8 +2074,11 @@ class ProPresenterApp {
 
     // Active Video
     const activeVid = this.getActiveOperatorVideo();
-    const queueLen = Array.isArray(state.mediaQueue) ? state.mediaQueue.length : 0;
+    const queueLen = stageActive
+      ? (Array.isArray(state.stageMainQueue) ? state.stageMainQueue.length : 0)
+      : (Array.isArray(state.mediaQueue) ? state.mediaQueue.length : 0);
     const isPaused = activeVid ? activeVid.paused : !!state.isMediaPaused;
+    const isLooping = stageActive ? Boolean(state.stageMainLoop) : (queueLen === 0);
 
     if (iconEl) iconEl.innerHTML = iconSvg('film', { size: 14 });
     if (nameEl) nameEl.textContent = activeTitle;
@@ -2071,10 +2088,14 @@ class ProPresenterApp {
         modeBadgeEl.innerHTML = `${iconSvg('pause', { size: 11, className: 'lucide-icon' })} EN PAUSA`;
         modeBadgeEl.className = 'media-timeline-mode-badge paused-mode';
       } else if (queueLen > 0) {
-        modeBadgeEl.innerHTML = `${iconSvg('skip-forward', { size: 11, className: 'lucide-icon' })} COLA (${queueLen})`;
+        const loopSuffix = (stageActive && isLooping) ? ' • LOOP' : '';
+        modeBadgeEl.innerHTML = `${iconSvg('skip-forward', { size: 11, className: 'lucide-icon' })} COLA (${queueLen})${loopSuffix}`;
         modeBadgeEl.className = 'media-timeline-mode-badge queue-mode';
-      } else {
+      } else if (isLooping) {
         modeBadgeEl.innerHTML = `${iconSvg('repeat', { size: 11, className: 'lucide-icon' })} LOOP`;
+        modeBadgeEl.className = 'media-timeline-mode-badge';
+      } else {
+        modeBadgeEl.innerHTML = `${iconSvg('play', { size: 11, className: 'lucide-icon' })} 1 VEZ`;
         modeBadgeEl.className = 'media-timeline-mode-badge';
       }
     }
@@ -2414,24 +2435,78 @@ class ProPresenterApp {
 
   initStageDualPlayerEvents() {
     this._probingStageDurations = new Set();
+    this.stageMainSelectedFolder = "General";
+    this.stageSecondarySelectedFolder = "General";
+    this.stageMainSearchQuery = "";
+    this.stageSecondarySearchQuery = "";
 
     const btnAddMain = document.getElementById('btn-stage-add-main-video');
     const btnAddSec = document.getElementById('btn-stage-add-secondary-video');
-    const btnCopyMain = document.getElementById('btn-stage-copy-from-media-main');
-    const btnCopySec = document.getElementById('btn-stage-copy-from-media-secondary');
     const inputMainFiles = document.getElementById('input-stage-main-files');
     const inputSecFiles = document.getElementById('input-stage-secondary-files');
+    const inputMainSearch = document.getElementById('input-stage-main-search');
+    const inputSecSearch = document.getElementById('input-stage-secondary-search');
+    const btnClearMainSearch = document.getElementById('btn-clear-stage-main-search');
+    const btnClearSecSearch = document.getElementById('btn-clear-stage-secondary-search');
+    const btnMainAddPhysFolder = document.getElementById('btn-stage-main-add-phys-folder');
+    const btnMainAddVirtFolder = document.getElementById('btn-stage-main-add-virt-folder');
+    const btnSecAddPhysFolder = document.getElementById('btn-stage-sec-add-phys-folder');
+    const btnSecAddVirtFolder = document.getElementById('btn-stage-sec-add-virt-folder');
     const btnSendScreens = document.getElementById('btn-stage-send-screens');
     const btnClearSelection = document.getElementById('btn-stage-clear-selection');
     const btnStopStage = document.getElementById('btn-stage-stop-playback');
+    const btnMainLoop = document.getElementById('btn-stage-main-loop');
+    const btnQueueNext = document.getElementById('btn-stage-queue-next');
     const dockMain = document.getElementById('stage-dock-main');
     const dockSec = document.getElementById('stage-dock-secondary');
 
     btnAddMain?.addEventListener('click', () => this.triggerStageVideoPicker('main', inputMainFiles));
     btnAddSec?.addEventListener('click', () => this.triggerStageVideoPicker('secondary', inputSecFiles));
 
-    btnCopyMain?.addEventListener('click', () => this.copyVideosFromMediaToStageDock('main'));
-    btnCopySec?.addEventListener('click', () => this.copyVideosFromMediaToStageDock('secondary'));
+    btnMainLoop?.addEventListener('click', () => {
+      const enabled = store.toggleStageMainLoop();
+      this.showToast(
+        enabled
+          ? 'Loop de Pantalla Principal ACTIVADO (el video o la cola se repetirá en bucle).'
+          : 'Loop de Pantalla Principal DESACTIVADO.',
+        'info'
+      );
+    });
+
+    btnQueueNext?.addEventListener('click', () => {
+      if (store.state.stageMedia?.active) {
+        store.advanceStageMainQueue();
+      }
+    });
+
+    btnMainAddPhysFolder?.addEventListener('click', () => this.handleAddPhysicalFolder());
+    btnSecAddPhysFolder?.addEventListener('click', () => this.handleAddPhysicalFolder());
+    btnMainAddVirtFolder?.addEventListener('click', () => document.getElementById('btn-add-virtual-folder')?.click());
+    btnSecAddVirtFolder?.addEventListener('click', () => document.getElementById('btn-add-virtual-folder')?.click());
+
+    inputMainSearch?.addEventListener('input', () => {
+      this.stageMainSearchQuery = (inputMainSearch.value || '').trim();
+      if (btnClearMainSearch) btnClearMainSearch.style.display = this.stageMainSearchQuery ? 'inline-flex' : 'none';
+      this.renderStageDualView(store.state);
+    });
+    btnClearMainSearch?.addEventListener('click', () => {
+      this.stageMainSearchQuery = '';
+      if (inputMainSearch) inputMainSearch.value = '';
+      btnClearMainSearch.style.display = 'none';
+      this.renderStageDualView(store.state);
+    });
+
+    inputSecSearch?.addEventListener('input', () => {
+      this.stageSecondarySearchQuery = (inputSecSearch.value || '').trim();
+      if (btnClearSecSearch) btnClearSecSearch.style.display = this.stageSecondarySearchQuery ? 'inline-flex' : 'none';
+      this.renderStageDualView(store.state);
+    });
+    btnClearSecSearch?.addEventListener('click', () => {
+      this.stageSecondarySearchQuery = '';
+      if (inputSecSearch) inputSecSearch.value = '';
+      btnClearSecSearch.style.display = 'none';
+      this.renderStageDualView(store.state);
+    });
 
     inputMainFiles?.addEventListener('change', async (e) => {
       const files = Array.from(e.target.files || []);
@@ -2449,7 +2524,7 @@ class ProPresenterApp {
       inputSecFiles.value = '';
     });
 
-    // Drag & Drop independiente en ambos docks de Stage
+    // Drag & Drop independiente en ambos docks de Combinación
     [
       { el: dockMain, dock: 'main' },
       { el: dockSec, dock: 'secondary' }
@@ -2489,7 +2564,7 @@ class ProPresenterApp {
       const dispatched = store.dispatchStageToScreens();
       if (dispatched) {
         const mainMonLabel = this.getDisplayShortLabel(this.selectedAudienceDisplayId, 'Monitor Principal');
-        const secMonLabel = this.getDisplayShortLabel(this.selectedVideowallDisplayId, 'Monitor Videowall');
+        const secMonLabel = this.getDisplayShortLabel(this.selectedVideowallDisplayId, 'Monitor Columnas');
         this.showToast(
           `Enviado: ${mainMonLabel} ➔ ${dispatched.mainVideo?.name || '--'} | ${secMonLabel} ➔ ${dispatched.secondaryVideo?.name || '--'}`,
           'success'
@@ -2512,7 +2587,16 @@ class ProPresenterApp {
     });
   }
 
+  getActiveStageFolderForImport(targetDock) {
+    const rawFolder = targetDock === 'secondary' ? this.stageSecondarySelectedFolder : this.stageMainSelectedFolder;
+    if (!rawFolder || rawFolder.startsWith('phys:')) {
+      return (store.state.mediaFolders && store.state.mediaFolders[0]) || 'General';
+    }
+    return rawFolder;
+  }
+
   async triggerStageVideoPicker(targetDock, fallbackInputEl) {
+    const targetFolder = this.getActiveStageFolderForImport(targetDock);
     if (window.electronAPI && typeof window.electronAPI.selectMediaFiles === 'function') {
       try {
         const picked = await window.electronAPI.selectMediaFiles();
@@ -2523,7 +2607,7 @@ class ProPresenterApp {
           return;
         }
         const items = await Promise.all(validMedia.map(async (f, idx) => {
-          const id = `stage-${targetDock}-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`;
+          const id = `media-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`;
           const isImg = /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(f.name || f.url || '');
           const mimeType = isImg ? 'image/png' : 'video/mp4';
           let thumb = isImg ? f.url : '';
@@ -2541,13 +2625,14 @@ class ProPresenterApp {
             url: f.url,
             filePath: f.filePath || '',
             type: mimeType,
+            folder: targetFolder,
             isImage: isImg,
             duration,
             thumbnail: thumb
           };
         }));
-        store.addStageMediaBatch(targetDock, items);
-        this.showToast(`${items.length} archivo${items.length === 1 ? '' : 's'} agregado${items.length === 1 ? '' : 's'} al dock ${targetDock === 'secondary' ? 'Secundario (Videowall)' : 'Principal'}.`, 'success');
+        store.addMediaBatch(items);
+        this.showToast(`${items.length} archivo${items.length === 1 ? '' : 's'} cargado${items.length === 1 ? '' : 's'} en carpeta "${targetFolder}".`, 'success');
       } catch (err) {
         console.warn('[Stage] Error seleccionando archivos:', err);
       }
@@ -2557,6 +2642,7 @@ class ProPresenterApp {
   }
 
   async importStageVideoFiles(targetDock, files) {
+    const targetFolder = this.getActiveStageFolderForImport(targetDock);
     const mediaFiles = Array.from(files || []).filter(f =>
       (f.type && (f.type.startsWith('video/') || f.type.startsWith('image/'))) ||
       /\.(mp4|webm|mov|mkv|avi|png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(f.name || '')
@@ -2566,20 +2652,20 @@ class ProPresenterApp {
       return;
     }
 
-    const processed = await this.processMediaFiles(mediaFiles, 'Stage');
-    const withDurations = await Promise.all(processed.map(async (item, idx) => {
+    const processed = await this.processMediaFiles(mediaFiles, targetFolder);
+    const withDurations = await Promise.all(processed.map(async (item) => {
       const isImg = Boolean((item.type && item.type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(item.name || item.url || ''));
       const duration = isImg ? 0 : await this.probeVideoDurationPromise(item.url);
       return {
         ...item,
-        id: `stage-${targetDock}-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        folder: targetFolder,
         isImage: isImg,
         duration
       };
     }));
 
-    store.addStageMediaBatch(targetDock, withDurations);
-    this.showToast(`${withDurations.length} archivo${withDurations.length === 1 ? '' : 's'} importado${withDurations.length === 1 ? '' : 's'} al dock ${targetDock === 'secondary' ? 'Secundario (Videowall)' : 'Principal'}.`, 'success');
+    store.addMediaBatch(withDurations);
+    this.showToast(`${withDurations.length} archivo${withDurations.length === 1 ? '' : 's'} importado${withDurations.length === 1 ? '' : 's'} en carpeta "${targetFolder}".`, 'success');
   }
 
   copyVideosFromMediaToStageDock(targetDock) {
@@ -2639,26 +2725,178 @@ class ProPresenterApp {
 
   ensureStageItemDurationProbed(targetDock, item) {
     if (!item || !item.id || !item.url || item.isImage || (item.type && item.type.startsWith('image/')) || (typeof item.duration === 'number' && item.duration > 0)) return;
-    const key = `${targetDock}:${item.id}`;
-    if (this._probingStageDurations?.has(key)) return;
-    this._probingStageDurations?.add(key);
+    if (!this._probingStageDurations) this._probingStageDurations = new Set();
+    if (!this._stageDurationProbeQueue) this._stageDurationProbeQueue = [];
+    if (typeof this._activeStageDurationProbes !== 'number') this._activeStageDurationProbes = 0;
 
-    this.probeVideoDurationPromise(item.url).then((dur) => {
-      if (dur > 0) {
-        store.updateStageMediaDuration(targetDock, item.id, dur);
+    if (this._probingStageDurations.has(item.id)) return;
+    this._probingStageDurations.add(item.id);
+
+    this._stageDurationProbeQueue.push({ targetDock, item });
+    this._processStageDurationProbeQueue();
+  }
+
+  _processStageDurationProbeQueue() {
+    while (this._activeStageDurationProbes < 2 && this._stageDurationProbeQueue && this._stageDurationProbeQueue.length > 0) {
+      const task = this._stageDurationProbeQueue.shift();
+      this._activeStageDurationProbes++;
+      this.probeVideoDurationPromise(task.item.url).then((dur) => {
+        if (dur > 0) {
+          store.updateStageMediaDuration(task.targetDock, task.item.id, dur);
+          const durLabel = this.formatMediaTime(dur);
+          document.querySelectorAll(`.stage-video-card[data-item-id="${task.item.id}"]`).forEach(card => {
+            let badge = card.querySelector('.stage-card-duration-badge');
+            if (!badge) {
+              badge = document.createElement('span');
+              badge.className = 'stage-card-duration-badge';
+              card.appendChild(badge);
+            }
+            badge.textContent = durLabel;
+          });
+        }
+      }).finally(() => {
+        this._probingStageDurations?.delete(task.item.id);
+        this._activeStageDurationProbes--;
+        this._processStageDurationProbeQueue();
+      });
+    }
+  }
+
+  validateStageSelectedFolder(selectedFolder, folders, physicalFolders) {
+    const defaultFolder = folders[0] || (physicalFolders[0] ? `phys:${physicalFolders[0].path}` : "General");
+    if (!selectedFolder || selectedFolder === 'all') {
+      return defaultFolder;
+    }
+    if (selectedFolder.startsWith('phys:')) {
+      const physPath = selectedFolder.slice(5);
+      if (!physicalFolders.some(pf => pf.path === physPath)) {
+        return defaultFolder;
       }
-    }).finally(() => {
-      this._probingStageDurations?.delete(key);
+      return selectedFolder;
+    }
+    if (!folders.includes(selectedFolder)) {
+      return defaultFolder;
+    }
+    return selectedFolder;
+  }
+
+  getStageFolderDisplayLabel(selectedFolder, physicalFolders) {
+    if (!selectedFolder) return 'General';
+    if (selectedFolder.startsWith('phys:')) {
+      const physPath = selectedFolder.slice(5);
+      const foundPhys = (physicalFolders || []).find(p => p.path === physPath);
+      return foundPhys ? `${foundPhys.name} (En vivo)` : physPath;
+    }
+    return selectedFolder;
+  }
+
+  renderStageFolderTree(containerEl, selectedFolder, folders, physicalFolders, state, cacheKeyProp, onSelectFolder) {
+    if (!containerEl) return;
+    const allCount = (state.mediaLibrary || []).length;
+    const physCountsKey = physicalFolders.map(pf => {
+      const c = (state.mediaLibrary || []).filter(m => m.physicalFolderPath === pf.path).length;
+      return `${pf.path}:${c}`;
+    }).join(',');
+    const treeCacheKey = `${JSON.stringify(folders)}|${physCountsKey}|${allCount}|${selectedFolder}`;
+    if (cacheKeyProp && this[cacheKeyProp] === treeCacheKey && containerEl.innerHTML.trim()) {
+      return;
+    }
+    if (cacheKeyProp) this[cacheKeyProp] = treeCacheKey;
+
+    containerEl.innerHTML = `
+      ${folders.map(folder => {
+        const count = (state.mediaLibrary || []).filter(m => m.folder === folder && !m.isPhysicalFolderItem).length;
+        const isActive = selectedFolder === folder;
+        return `
+          <div class="folder-item ${isActive ? 'active' : ''}" data-folder-name="${this.escapeHtml(folder)}" title="Carpeta Virtual: ${this.escapeHtml(folder)}">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;">${iconSvg('folder', { size: 13, className: 'lucide-icon icon-cyan' })} ${this.escapeHtml(folder)}</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="count">${count}</span>
+            </div>
+          </div>
+        `;
+      }).join('')}
+      ${physicalFolders.map(phys => {
+        const folderKey = `phys:${phys.path}`;
+        const count = (state.mediaLibrary || []).filter(m => m.physicalFolderPath === phys.path).length;
+        const isActive = selectedFolder === folderKey;
+        return `
+          <div class="folder-item physical-folder ${isActive ? 'active' : ''}" data-folder-name="${this.escapeHtml(folderKey)}" title="Carpeta Física en Tiempo Real: ${this.escapeHtml(phys.path)}">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;">${iconSvg('hard-drive', { size: 13, className: 'lucide-icon icon-green' })} ${this.escapeHtml(phys.name)}</span>
+            <div style="display: flex; align-items: center; gap: 5px;">
+              <span class="phys-live-badge" title="Sincronizada en tiempo real con el disco">LIVE</span>
+              <span class="count">${count}</span>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    `;
+
+    containerEl.querySelectorAll('.folder-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const folderName = item.getAttribute('data-folder-name');
+        if (folderName) onSelectFolder(folderName);
+      });
+    });
+  }
+
+  filterStageMediaByFolderAndSearch(pool, selectedFolder, rawQuery) {
+    const normQuery = this.normalizeSearchText(rawQuery);
+    return pool.filter(item => {
+      // Elementos creados directamente en stageMainLibrary/stageSecondaryLibrary sin carpeta específica siempre son visibles en la carpeta activa
+      let matchesFolder = false;
+      if (item.id && item.id.startsWith('stage-') && !item.folder && !item.isPhysicalFolderItem) {
+        matchesFolder = true;
+      } else if (selectedFolder && selectedFolder.startsWith('phys:')) {
+        const targetPhysPath = selectedFolder.slice(5);
+        matchesFolder = item.physicalFolderPath === targetPhysPath;
+      } else {
+        matchesFolder = (item.folder || 'General') === selectedFolder && !item.isPhysicalFolderItem;
+      }
+
+      const matchesSearch = !normQuery ||
+        this.normalizeSearchText(item.name).includes(normQuery) ||
+        this.normalizeSearchText(item.folder || '').includes(normQuery);
+
+      return matchesFolder && matchesSearch;
     });
   }
 
   renderStageDualView(state = store.state) {
     const mainGridEl = document.getElementById('stage-main-grid');
     const secGridEl = document.getElementById('stage-secondary-grid');
+    const mainFoldersEl = document.getElementById('stage-main-folders-list');
+    const secFoldersEl = document.getElementById('stage-secondary-folders-list');
+    const lblMainFolderInfo = document.getElementById('lbl-stage-main-folder-info');
+    const lblSecFolderInfo = document.getElementById('lbl-stage-secondary-folder-info');
     if (!mainGridEl || !secGridEl) return;
 
-    const mainLib = Array.isArray(state.stageMainLibrary) ? state.stageMainLibrary : [];
-    const secLib = Array.isArray(state.stageSecondaryLibrary) ? state.stageSecondaryLibrary : [];
+    const folders = state.mediaFolders || ["General"];
+    const physicalFolders = state.physicalMediaFolders || [];
+
+    this.stageMainSelectedFolder = this.validateStageSelectedFolder(this.stageMainSelectedFolder, folders, physicalFolders);
+    this.stageSecondarySelectedFolder = this.validateStageSelectedFolder(this.stageSecondarySelectedFolder, folders, physicalFolders);
+
+    // Renderizar árbol de carpetas en ambos docks (con cache key para evitar reconstrucción innecesaria)
+    this.renderStageFolderTree(mainFoldersEl, this.stageMainSelectedFolder, folders, physicalFolders, state, '_lastStageMainFolderCacheKey', (folderName) => {
+      this.stageMainSelectedFolder = folderName;
+      this.renderStageDualView(store.state);
+    });
+    this.renderStageFolderTree(secFoldersEl, this.stageSecondarySelectedFolder, folders, physicalFolders, state, '_lastStageSecFolderCacheKey', (folderName) => {
+      this.stageSecondarySelectedFolder = folderName;
+      this.renderStageDualView(store.state);
+    });
+
+    const mainFolderLabel = this.getStageFolderDisplayLabel(this.stageMainSelectedFolder, physicalFolders);
+    const secFolderLabel = this.getStageFolderDisplayLabel(this.stageSecondarySelectedFolder, physicalFolders);
+    if (lblMainFolderInfo) lblMainFolderInfo.textContent = `Carpeta: ${mainFolderLabel}`;
+    if (lblSecFolderInfo) lblSecFolderInfo.textContent = `Carpeta: ${secFolderLabel}`;
+
+    const fullMainPool = store.getCombinedStagePool('main');
+    const fullSecPool = store.getCombinedStagePool('secondary');
+    const mainLib = this.filterStageMediaByFolderAndSearch(fullMainPool, this.stageMainSelectedFolder, this.stageMainSearchQuery);
+    const secLib = this.filterStageMediaByFolderAndSearch(fullSecPool, this.stageSecondarySelectedFolder, this.stageSecondarySearchQuery);
+
     const queueIds = Array.isArray(state.stageMainQueue) ? state.stageMainQueue : [];
     const mainSelectedId = state.stageMainSelectedId || null;
     const secSelectedId = state.stageSecondarySelectedId || null;
@@ -2671,142 +2909,270 @@ class ProPresenterApp {
     const mainMonLabel = this.getDisplayShortLabel(this.selectedAudienceDisplayId, 'Monitor 2');
     const secMonLabel = this.getDisplayShortLabel(this.selectedVideowallDisplayId, 'Monitor 3');
 
-    // 1. Renderizar Dock Superior (Videos / Imágenes Pantalla Principal)
-    if (mainLib.length === 0) {
-      mainGridEl.innerHTML = `
-        <div class="stage-empty-state">
-          <div>${iconSvg('tv', { size: 26, className: 'lucide-icon icon-gold' })}</div>
-          <div><strong>Dock Superior sin medios cargados (Destino: ${this.escapeHtml(mainMonLabel)})</strong></div>
-          <div>Haz clic en <strong>"Importar Video / Imagen"</strong>, usa <strong>"Traer de Media"</strong> o arrastra tus videos/imágenes aquí.</div>
-        </div>
-      `;
+    const mainGridCacheKey = `${this.stageMainSelectedFolder}|${this.stageMainSearchQuery}|${mainMonLabel}|${mainLib.map(m => `${m.id}:${m.name}:${m.thumbnail ? 1 : 0}`).join('|')}`;
+    const secGridCacheKey = `${this.stageSecondarySelectedFolder}|${this.stageSecondarySearchQuery}|${secMonLabel}|${secLib.map(m => `${m.id}:${m.name}:${m.thumbnail ? 1 : 0}`).join('|')}`;
+
+    // 1. Renderizar Grilla de la Carpeta Seleccionada en Dock Superior (Pantalla Principal)
+    if (this._lastStageMainGridCacheKey !== mainGridCacheKey || !mainGridEl.innerHTML.trim()) {
+      this._lastStageMainGridCacheKey = mainGridCacheKey;
+      if (mainLib.length === 0) {
+        mainGridEl.innerHTML = `
+          <div class="stage-empty-state">
+            <div>${iconSvg('folder-open', { size: 24, className: 'lucide-icon icon-gold' })}</div>
+            <div><strong>No hay videos o imágenes en la carpeta "${this.escapeHtml(mainFolderLabel)}"</strong></div>
+            <div>Selecciona otra carpeta en el árbol izquierdo o haz clic en <strong>"Cargar Video / Imagen"</strong>.</div>
+          </div>
+        `;
+      } else {
+        mainGridEl.innerHTML = mainLib.map(item => {
+          const isImg = Boolean(item.isImage || (item.type && item.type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|svg|bmp)($|\?)/i.test(item.url || ''));
+          if (!isImg) this.ensureStageItemDurationProbed('main', item);
+          const queuePos = queueIds.indexOf(item.id);
+          const isInQueue = queuePos !== -1;
+          const isSingleSelected = !isInQueue && queueIds.length === 0 && mainSelectedId === item.id;
+          const isLive = stageActive && ((liveMainId && liveMainId === item.id) || (!liveMainId && liveMainSrc && liveMainSrc === item.url));
+          const durLabel = (!isImg && typeof item.duration === 'number' && item.duration > 0)
+            ? this.formatMediaTime(item.duration)
+            : '';
+          const thumbSrc = item.thumbnail || (isImg ? item.url : '');
+
+          const thumbHtml = thumbSrc
+            ? `<img src="${thumbSrc}" class="stage-card-thumb" alt="${this.escapeHtml(item.name)}" loading="lazy" />`
+            : `<div class="stage-card-thumb-fallback">${iconSvg(isImg ? 'image' : 'film', { size: 28 })}</div>`;
+
+          return `
+            <div class="stage-video-card ${isSingleSelected ? 'selected-single' : ''} ${isInQueue ? 'in-queue' : ''} ${isLive ? 'is-live-playing' : ''}" data-stage-dock="main" data-item-id="${item.id}" data-item-url="${this.escapeHtml(item.url || '')}" title="${this.escapeHtml(item.name)} ➔ ${this.escapeHtml(mainMonLabel)} • Clic: Seleccionar • Botón '+ Cola' o Alt+Click: Agregar/Quitar de la cola">
+              ${thumbHtml}
+              ${isInQueue ? `<span class="stage-card-queue-badge" title="Posición #${queuePos + 1} en la cola">${queuePos + 1}</span>` : ''}
+              ${isLive ? `<span class="stage-card-live-pill">EN VIVO (${this.escapeHtml(mainMonLabel)})</span>` : ''}
+              <button type="button" class="btn-stage-card-queue ${isInQueue ? 'is-queued' : ''}" data-queue-item-id="${item.id}" title="${isInQueue ? `En cola (#${queuePos + 1}) — Clic para quitar de la cola` : 'Agregar este video a la cola de reproducción'}">${isInQueue ? `✓ Cola #${queuePos + 1}` : '+ Cola'}</button>
+              <span class="stage-card-type-tag ${isImg ? 'is-img' : ''}">${isImg ? 'IMAGEN' : 'VIDEO'}</span>
+              ${durLabel ? `<span class="stage-card-duration-badge">${durLabel}</span>` : ''}
+              <div class="stage-card-footer">
+                <span class="stage-card-title">${this.escapeHtml(item.name)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        mainGridEl.querySelectorAll('.stage-video-card').forEach(card => {
+          card.addEventListener('click', (e) => {
+            const itemId = card.getAttribute('data-item-id');
+            if (!itemId) return;
+            const clickedQueueBtn = e.target.closest('.btn-stage-card-queue');
+            if (clickedQueueBtn || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              store.toggleStageMainQueueItem(itemId);
+            } else {
+              store.selectStageMainVideo(itemId);
+            }
+          });
+        });
+      }
     } else {
-      mainGridEl.innerHTML = mainLib.map(item => {
-        const isImg = Boolean(item.isImage || (item.type && item.type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|svg|bmp)($|\?)/i.test(item.url || ''));
-        if (!isImg) this.ensureStageItemDurationProbed('main', item);
-        const queuePos = queueIds.indexOf(item.id);
+      // Actualización rápida in-place de clases y badges sin destruir el DOM ni recargar imágenes
+      mainGridEl.querySelectorAll('.stage-video-card').forEach(card => {
+        const itemId = card.getAttribute('data-item-id') || '';
+        const itemUrl = card.getAttribute('data-item-url') || '';
+        const queuePos = queueIds.indexOf(itemId);
         const isInQueue = queuePos !== -1;
-        const isSingleSelected = !isInQueue && queueIds.length === 0 && mainSelectedId === item.id;
-        const isLive = stageActive && ((liveMainId && liveMainId === item.id) || (!liveMainId && liveMainSrc && liveMainSrc === item.url));
-        const durLabel = (!isImg && typeof item.duration === 'number' && item.duration > 0)
-          ? this.formatMediaTime(item.duration)
-          : '';
-        const thumbSrc = item.thumbnail || (isImg ? item.url : '');
+        const isSingleSelected = !isInQueue && queueIds.length === 0 && mainSelectedId === itemId;
+        const isLive = stageActive && ((liveMainId && liveMainId === itemId) || (!liveMainId && liveMainSrc && liveMainSrc === itemUrl));
 
-        const thumbHtml = thumbSrc
-          ? `<img src="${thumbSrc}" class="stage-card-thumb" alt="${this.escapeHtml(item.name)}" />`
-          : `<div class="stage-card-thumb-fallback">${iconSvg(isImg ? 'image' : 'film', { size: 28 })}</div>`;
+        card.classList.toggle('selected-single', isSingleSelected);
+        card.classList.toggle('in-queue', isInQueue);
+        card.classList.toggle('is-live-playing', isLive);
 
-        return `
-          <div class="stage-video-card ${isSingleSelected ? 'selected-single' : ''} ${isInQueue ? 'in-queue' : ''} ${isLive ? 'is-live-playing' : ''}" data-stage-dock="main" data-item-id="${item.id}" title="${this.escapeHtml(item.name)} ➔ ${this.escapeHtml(mainMonLabel)} • Clic: Seleccionar • Alt+Click: Cola">
-            ${thumbHtml}
-            ${isInQueue ? `<span class="stage-card-queue-badge" title="Posición #${queuePos + 1} en la cola">${queuePos + 1}</span>` : ''}
-            ${isLive ? `<span class="stage-card-live-pill">EN VIVO (${this.escapeHtml(mainMonLabel)})</span>` : ''}
-            <span class="stage-card-type-tag ${isImg ? 'is-img' : ''}">${isImg ? 'IMAGEN' : 'VIDEO'}</span>
-            ${durLabel ? `<span class="stage-card-duration-badge">${durLabel}</span>` : ''}
-            <button type="button" class="stage-card-delete-btn" data-del-dock="main" data-del-id="${item.id}" title="Quitar de este dock">${iconSvg('x', { size: 12 })}</button>
-            <div class="stage-card-footer">
-              <span class="stage-card-title">${this.escapeHtml(item.name)}</span>
-            </div>
-          </div>
-        `;
-      }).join('');
+        let qBadge = card.querySelector('.stage-card-queue-badge');
+        if (isInQueue) {
+          if (!qBadge) {
+            qBadge = document.createElement('span');
+            qBadge.className = 'stage-card-queue-badge';
+            card.appendChild(qBadge);
+          }
+          qBadge.textContent = String(queuePos + 1);
+          qBadge.title = `Posición #${queuePos + 1} en la cola`;
+        } else if (qBadge) {
+          qBadge.remove();
+        }
+
+        const qBtn = card.querySelector('.btn-stage-card-queue');
+        if (qBtn) {
+          qBtn.classList.toggle('is-queued', isInQueue);
+          qBtn.textContent = isInQueue ? `✓ Cola #${queuePos + 1}` : '+ Cola';
+          qBtn.title = isInQueue
+            ? `En cola (#${queuePos + 1}) — Clic para quitar de la cola`
+            : 'Agregar este video a la cola de reproducción';
+        }
+
+        let livePill = card.querySelector('.stage-card-live-pill');
+        if (isLive) {
+          if (!livePill) {
+            livePill = document.createElement('span');
+            livePill.className = 'stage-card-live-pill';
+            card.appendChild(livePill);
+          }
+          livePill.textContent = `EN VIVO (${mainMonLabel})`;
+        } else if (livePill) {
+          livePill.remove();
+        }
+      });
     }
 
-    // 2. Renderizar Dock Inferior (Videos / Imágenes Pantalla Secundaria / Videowall)
-    if (secLib.length === 0) {
-      secGridEl.innerHTML = `
-        <div class="stage-empty-state">
-          <div>${iconSvg('film', { size: 26, className: 'lucide-icon icon-green' })}</div>
-          <div><strong>Dock Inferior sin medios cargados (Destino: ${this.escapeHtml(secMonLabel)})</strong></div>
-          <div>Haz clic en <strong>"Importar Video / Imagen"</strong>, usa <strong>"Traer de Media"</strong> o arrastra videos/imágenes acompañantes aquí.</div>
-        </div>
-      `;
+    // 2. Renderizar Grilla de la Carpeta Seleccionada en Dock Inferior (Pantalla Secundaria / Columnas)
+    if (this._lastStageSecGridCacheKey !== secGridCacheKey || !secGridEl.innerHTML.trim()) {
+      this._lastStageSecGridCacheKey = secGridCacheKey;
+      if (secLib.length === 0) {
+        secGridEl.innerHTML = `
+          <div class="stage-empty-state">
+            <div>${iconSvg('folder-open', { size: 24, className: 'lucide-icon icon-green' })}</div>
+            <div><strong>No hay videos o imágenes en la carpeta "${this.escapeHtml(secFolderLabel)}"</strong></div>
+            <div>Selecciona otra carpeta en el árbol izquierdo o haz clic en <strong>"Cargar Video / Imagen"</strong>.</div>
+          </div>
+        `;
+      } else {
+        secGridEl.innerHTML = secLib.map(item => {
+          const isImg = Boolean(item.isImage || (item.type && item.type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|svg|bmp)($|\?)/i.test(item.url || ''));
+          if (!isImg) this.ensureStageItemDurationProbed('secondary', item);
+          const isSelected = secSelectedId === item.id;
+          const isLive = stageActive && ((liveSecId && liveSecId === item.id) || (!liveSecId && liveSecSrc && liveSecSrc === item.url));
+          const durLabel = (!isImg && typeof item.duration === 'number' && item.duration > 0)
+            ? this.formatMediaTime(item.duration)
+            : '';
+          const thumbSrc = item.thumbnail || (isImg ? item.url : '');
+
+          const thumbHtml = thumbSrc
+            ? `<img src="${thumbSrc}" class="stage-card-thumb" alt="${this.escapeHtml(item.name)}" loading="lazy" />`
+            : `<div class="stage-card-thumb-fallback">${iconSvg(isImg ? 'image' : 'film', { size: 28 })}</div>`;
+
+          return `
+            <div class="stage-video-card ${isSelected ? 'selected-single' : ''} ${isLive ? 'is-live-playing' : ''}" data-stage-dock="secondary" data-item-id="${item.id}" data-item-url="${this.escapeHtml(item.url || '')}" title="${this.escapeHtml(item.name)} ➔ ${this.escapeHtml(secMonLabel)} • Clic: Seleccionar para este monitor">
+              ${thumbHtml}
+              ${isLive ? `<span class="stage-card-live-pill">EN VIVO (${this.escapeHtml(secMonLabel)})</span>` : ''}
+              <span class="stage-card-type-tag ${isImg ? 'is-img' : ''}">${isImg ? 'IMAGEN' : 'VIDEO'}</span>
+              ${durLabel ? `<span class="stage-card-duration-badge">${durLabel}</span>` : ''}
+              <div class="stage-card-footer">
+                <span class="stage-card-title">${this.escapeHtml(item.name)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        secGridEl.querySelectorAll('.stage-video-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const itemId = card.getAttribute('data-item-id');
+            if (!itemId) return;
+            store.selectStageSecondaryVideo(itemId);
+          });
+        });
+      }
     } else {
-      secGridEl.innerHTML = secLib.map(item => {
-        const isImg = Boolean(item.isImage || (item.type && item.type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|svg|bmp)($|\?)/i.test(item.url || ''));
-        if (!isImg) this.ensureStageItemDurationProbed('secondary', item);
-        const isSelected = secSelectedId === item.id;
-        const isLive = stageActive && ((liveSecId && liveSecId === item.id) || (!liveSecId && liveSecSrc && liveSecSrc === item.url));
-        const durLabel = (!isImg && typeof item.duration === 'number' && item.duration > 0)
-          ? this.formatMediaTime(item.duration)
-          : '';
-        const thumbSrc = item.thumbnail || (isImg ? item.url : '');
+      secGridEl.querySelectorAll('.stage-video-card').forEach(card => {
+        const itemId = card.getAttribute('data-item-id') || '';
+        const itemUrl = card.getAttribute('data-item-url') || '';
+        const isSelected = secSelectedId === itemId;
+        const isLive = stageActive && ((liveSecId && liveSecId === itemId) || (!liveSecId && liveSecSrc && liveSecSrc === itemUrl));
 
-        const thumbHtml = thumbSrc
-          ? `<img src="${thumbSrc}" class="stage-card-thumb" alt="${this.escapeHtml(item.name)}" />`
-          : `<div class="stage-card-thumb-fallback">${iconSvg(isImg ? 'image' : 'film', { size: 28 })}</div>`;
+        card.classList.toggle('selected-single', isSelected);
+        card.classList.toggle('is-live-playing', isLive);
 
-        return `
-          <div class="stage-video-card ${isSelected ? 'selected-single' : ''} ${isLive ? 'is-live-playing' : ''}" data-stage-dock="secondary" data-item-id="${item.id}" title="${this.escapeHtml(item.name)} ➔ ${this.escapeHtml(secMonLabel)} • Clic: Seleccionar para este monitor">
-            ${thumbHtml}
-            ${isLive ? `<span class="stage-card-live-pill">EN VIVO (${this.escapeHtml(secMonLabel)})</span>` : ''}
-            <span class="stage-card-type-tag ${isImg ? 'is-img' : ''}">${isImg ? 'IMAGEN' : 'VIDEO'}</span>
-            ${durLabel ? `<span class="stage-card-duration-badge">${durLabel}</span>` : ''}
-            <button type="button" class="stage-card-delete-btn" data-del-dock="secondary" data-del-id="${item.id}" title="Quitar de este dock">${iconSvg('x', { size: 12 })}</button>
-            <div class="stage-card-footer">
-              <span class="stage-card-title">${this.escapeHtml(item.name)}</span>
-            </div>
-          </div>
-        `;
-      }).join('');
+        let livePill = card.querySelector('.stage-card-live-pill');
+        if (isLive) {
+          if (!livePill) {
+            livePill = document.createElement('span');
+            livePill.className = 'stage-card-live-pill';
+            card.appendChild(livePill);
+          }
+          livePill.textContent = `EN VIVO (${secMonLabel})`;
+        } else if (livePill) {
+          livePill.remove();
+        }
+      });
     }
 
-    // Bind clicks en tarjetas del Dock Superior (Clic normal vs Alt + Click)
-    mainGridEl.querySelectorAll('.stage-video-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.stage-card-delete-btn')) return;
-        const itemId = card.getAttribute('data-item-id');
-        if (!itemId) return;
-        if (e.altKey) {
-          store.toggleStageMainQueueItem(itemId);
-        } else {
-          store.selectStageMainVideo(itemId);
-        }
-      });
-    });
-
-    // Bind clicks en tarjetas del Dock Inferior (Clic normal)
-    secGridEl.querySelectorAll('.stage-video-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.stage-card-delete-btn')) return;
-        const itemId = card.getAttribute('data-item-id');
-        if (!itemId) return;
-        store.selectStageSecondaryVideo(itemId);
-      });
-    });
-
-    // Bind botones eliminar tarjeta en ambos docks
-    document.querySelectorAll('#view-stage-dual .stage-card-delete-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const dock = btn.getAttribute('data-del-dock');
-        const id = btn.getAttribute('data-del-id');
-        if (dock && id) {
-          store.deleteStageMediaItem(dock, id);
-        }
-      });
-    });
-
-    // 3. Actualizar resumen de barra de acción y estado del botón "Enviar a pantallas"
+    // 3. Actualizar resumen de barra de acción, barra de cola, botón de Loop y estado del botón "Enviar a pantallas"
     const lblTargetMain = document.getElementById('lbl-stage-target-main');
     const lblTargetSec = document.getElementById('lbl-stage-target-secondary');
     const lblSummaryMain = document.getElementById('lbl-stage-summary-main');
     const lblSummarySec = document.getElementById('lbl-stage-summary-secondary');
     const btnSendScreens = document.getElementById('btn-stage-send-screens');
     const btnStopStage = document.getElementById('btn-stage-stop-playback');
+    const btnMainLoop = document.getElementById('btn-stage-main-loop');
+    const lblMainLoop = document.getElementById('lbl-stage-main-loop');
+    const btnQueueNext = document.getElementById('btn-stage-queue-next');
+    const queueStripEl = document.getElementById('stage-main-queue-strip');
     const badgeStageLive = document.getElementById('badge-stage-live-status');
 
+    const isMainLoopOn = Boolean(state.stageMainLoop);
+    if (btnMainLoop) {
+      btnMainLoop.classList.toggle('active', isMainLoopOn);
+      btnMainLoop.setAttribute('aria-pressed', String(isMainLoopOn));
+    }
+    if (lblMainLoop) {
+      lblMainLoop.textContent = isMainLoopOn ? 'Loop Principal: ON' : 'Loop Principal: OFF';
+    }
+
+    if (btnQueueNext) {
+      btnQueueNext.style.display = (stageActive && queueIds.length > 1) ? 'inline-flex' : 'none';
+    }
+
+    if (queueStripEl) {
+      if (queueIds.length > 0) {
+        queueStripEl.style.display = 'flex';
+        const activeQIdx = stageActive ? state.stageActiveQueueIndex : -1;
+        const chipsHtml = queueIds.map((id, idx) => {
+          const itemObj = fullMainPool.find(m => m.id === id);
+          const itemName = itemObj ? itemObj.name : `Video #${idx + 1}`;
+          const isPlayingThis = stageActive && activeQIdx === idx && !state.stageQueueFinished && !state.stageMedia?.mainEnded;
+          return `
+            <div class="stage-queue-chip ${isPlayingThis ? 'is-playing' : ''}" data-q-idx="${idx}" title="${stageActive ? 'Clic para reproducir este elemento de la cola ahora' : `Posición #${idx + 1}: ${this.escapeHtml(itemName)}`}">
+              <span class="stage-queue-chip-num">${idx + 1}</span>
+              <span class="stage-queue-chip-name">${this.escapeHtml(itemName)}</span>
+              <button type="button" class="stage-queue-chip-remove" data-remove-q-idx="${idx}" title="Quitar de la cola">&times;</button>
+            </div>
+          `;
+        }).join('');
+        queueStripEl.innerHTML = `
+          <span class="stage-queue-strip-title">${iconSvg('list-ordered', { size: 12 })} Cola (${queueIds.length})${isMainLoopOn ? ' 🔁' : ''}:</span>
+          ${chipsHtml}
+        `;
+        queueStripEl.querySelectorAll('.stage-queue-chip').forEach(chip => {
+          chip.addEventListener('click', (e) => {
+            if (e.target.closest('.stage-queue-chip-remove')) return;
+            const idx = parseInt(chip.getAttribute('data-q-idx'), 10);
+            if (!isNaN(idx)) {
+              if (store.state.stageMedia?.active) {
+                store.playStageQueueIndexNow(idx);
+              }
+            }
+          });
+        });
+        queueStripEl.querySelectorAll('.stage-queue-chip-remove').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = parseInt(btn.getAttribute('data-remove-q-idx'), 10);
+            if (!isNaN(idx)) {
+              store.removeStageMainQueueItemAt(idx);
+            }
+          });
+        });
+      } else {
+        queueStripEl.style.display = 'none';
+        queueStripEl.innerHTML = '';
+      }
+    }
+
     if (lblTargetMain) lblTargetMain.textContent = `${mainMonLabel} (Principal):`;
-    if (lblTargetSec) lblTargetSec.textContent = `${secMonLabel} (Videowall):`;
+    if (lblTargetSec) lblTargetSec.textContent = `${secMonLabel} (Columnas):`;
 
     if (lblSummaryMain) {
       if (queueIds.length > 0) {
-        const firstQueued = mainLib.find(m => m.id === queueIds[0]);
-        lblSummaryMain.textContent = `Cola (${queueIds.length} video${queueIds.length === 1 ? '' : 's'}${firstQueued ? `: ${firstQueued.name}` : ''})`;
+        const firstQueued = fullMainPool.find(m => m.id === queueIds[0]);
+        lblSummaryMain.textContent = `Cola (${queueIds.length} medio${queueIds.length === 1 ? '' : 's'}${firstQueued ? `: ${firstQueued.name}` : ''})`;
         lblSummaryMain.style.color = 'var(--color-brand-amber)';
       } else if (mainSelectedId) {
-        const sel = mainLib.find(m => m.id === mainSelectedId);
+        const sel = fullMainPool.find(m => m.id === mainSelectedId);
         lblSummaryMain.textContent = sel ? sel.name : 'Sin selección';
         lblSummaryMain.style.color = sel ? '#ffffff' : 'var(--text-dim)';
       } else {
@@ -2817,7 +3183,7 @@ class ProPresenterApp {
 
     if (lblSummarySec) {
       if (secSelectedId) {
-        const selSec = secLib.find(m => m.id === secSelectedId);
+        const selSec = fullSecPool.find(m => m.id === secSelectedId);
         lblSummarySec.textContent = selSec ? selSec.name : 'Sin selección';
         lblSummarySec.style.color = selSec ? '#34d399' : 'var(--text-dim)';
       } else {
@@ -4130,11 +4496,13 @@ class ProPresenterApp {
         if (paths.length > 0) {
           const synced = await window.electronAPI.syncPhysicalFolders(paths);
           const syncedList = Array.isArray(synced) ? synced : Object.values(synced || {});
+          let anySynced = false;
           syncedList.forEach(folderData => {
             const fPath = folderData?.path || folderData?.folderPath;
             const fName = folderData?.name || folderData?.folderName;
             if (fPath) {
-              store.syncPhysicalFolderItems(fPath, fName, folderData.files || []);
+              store.syncPhysicalFolderItems(fPath, fName, folderData.files || [], false);
+              anySynced = true;
             }
           });
           if (this._mediaThumbHydrationPromise) {
@@ -4142,6 +4510,9 @@ class ProPresenterApp {
           }
           if (this._cachedThumbMap && this._cachedThumbMap.size > 0) {
             store.hydrateMediaThumbnailsBatch(this._cachedThumbMap);
+          }
+          if (anySynced) {
+            store.notify();
           }
         }
       } catch (err) {
@@ -6713,14 +7084,14 @@ class ProPresenterApp {
         ? (state.stageMedia.mainVideo?.src || '')
         : state.activeVideoUrl;
       const targetOperatorPlayId = stageActive
-        ? (`stage-${state.stageMedia.syncTimestamp || 0}-${state.stageMedia.queueIndex ?? -1}-${targetOperatorMediaUrl}`)
+        ? (`stage-${state.stageMedia.playInstanceId || state.stageMedia.syncTimestamp || 0}-${state.stageMedia.queueIndex ?? -1}-${targetOperatorMediaUrl}`)
         : (state.activeMediaPlayId || 0);
 
       const shouldOperatorMute = this.isAudienceOpen || !!state.isMediaAudioMuted;
       const operatorVolume = typeof state.mediaAudioVolume === 'number' ? state.mediaAudioVolume : 1.0;
       const playbackRate = typeof state.mediaPlaybackRate === 'number' ? Math.max(0.25, Math.min(2.0, state.mediaPlaybackRate)) : 1.0;
       const hasQueue = Array.isArray(state.mediaQueue) && state.mediaQueue.length > 0;
-      const shouldLoop = stageActive ? false : !hasQueue;
+      const shouldLoop = stageActive ? Boolean(state.stageMedia.mainVideo?.loop) : !hasQueue;
 
       bgA.muted = shouldOperatorMute;
       bgB.muted = shouldOperatorMute;
@@ -6862,7 +7233,10 @@ class ProPresenterApp {
 
     // Update Interactive Media Timeline UI
     this.updateMediaTimelineUI(state);
-    this.renderStageDualView(state);
+    const appContainerEl = document.getElementById('app');
+    if (appContainerEl && appContainerEl.classList.contains('stage-mode-active')) {
+      this.renderStageDualView(state);
+    }
 
     const isStageModePlaying = Boolean(state.stageMedia && state.stageMedia.active);
 

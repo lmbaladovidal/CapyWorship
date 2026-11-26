@@ -40,6 +40,11 @@ export class BroadcastSync {
         this.lastReceivedState = state;
         this.listeners.forEach(fn => fn(state));
       });
+    }
+    if (this.isOperator && typeof window !== "undefined" && window.electronAPI && typeof window.electronAPI.onMediaEnded === "function") {
+      this._unsubscribeMediaEndedIpc = window.electronAPI.onMediaEnded((url) => {
+        this.mediaEndedListeners.forEach(fn => fn(url));
+      });
     } else if (!this.isOperator && typeof window !== "undefined" && !window.electronAPI && typeof EventSource !== "undefined") {
       // Fallback to SSE when running outside Electron (e.g. OBS Browser Source / Chrome / Edge)
       const protocol = window.location?.protocol || "http:";
@@ -75,6 +80,10 @@ export class BroadcastSync {
       this._unsubscribeIpc();
       this._unsubscribeIpc = null;
     }
+    if (typeof this._unsubscribeMediaEndedIpc === "function") {
+      this._unsubscribeMediaEndedIpc();
+      this._unsubscribeMediaEndedIpc = null;
+    }
     if (this.eventSource) {
       try { this.eventSource.close(); } catch (e) {}
       this.eventSource = null;
@@ -99,6 +108,11 @@ export class BroadcastSync {
   notifyMediaEnded(url = "") {
     try {
       this.channel?.postMessage({ type: "MEDIA_ENDED", url, timestamp: Date.now() });
+    } catch (e) {}
+    try {
+      if (typeof window !== "undefined" && window.electronAPI && typeof window.electronAPI.sendMediaEnded === "function") {
+        window.electronAPI.sendMediaEnded(url);
+      }
     } catch (e) {}
   }
 

@@ -6,16 +6,33 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 // Hidratar automáticamente localStorage desde la base de datos persistente en disco antes de iniciar la app.
 // Esto garantiza que al actualizar la versión, usar el instalador o abrir el ejecutable portable,
 // jamás se pierdan canciones, biblias, plantillas, carpetas ni configuraciones previas.
+function isMainOperatorView() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return false;
+    const p = (window.location.pathname || '').toLowerCase();
+    if (p.endsWith('splash.html') || p.endsWith('audience.html') || p.endsWith('videowall.html') || p.endsWith('stage.html')) {
+      return false;
+    }
+    return true;
+  } catch (_) {
+    return true;
+  }
+}
+
 function syncLocalStorageWithDiskOnBoot() {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
+    if (!isMainOperatorView()) return;
+
+    // Fast path: si localStorage ya está poblado con los decks del usuario, evitar lectura síncrona pesada de disco
+    const hasCustomDecksInLocal = Boolean(window.localStorage.getItem('propresenter_decks'));
+    if (hasCustomDecksInLocal) return;
+
     const diskStorage = ipcRenderer.sendSync('load-persistent-storage-sync');
     if (diskStorage && typeof diskStorage === 'object') {
-      const hasCustomDecksInLocal = Boolean(window.localStorage.getItem('propresenter_decks'));
       for (const [key, val] of Object.entries(diskStorage)) {
         if (typeof val !== 'string') continue;
         const currentVal = window.localStorage.getItem(key);
-        // Si la clave no existe en localStorage (o si localStorage se reinició tras actualizar/cambiar de ruta), restaurarla del disco
         if (currentVal === null || (!hasCustomDecksInLocal && key.startsWith('propresenter_'))) {
           window.localStorage.setItem(key, val);
         }
@@ -26,7 +43,18 @@ function syncLocalStorageWithDiskOnBoot() {
   }
 }
 
-function pushLocalStorageSnapshotToDisk() {
+let snapshotDebounceTimer = null;
+
+function pushLocalStorageSnapshotToDisk(immediate = false) {
+  if (!isMainOperatorView()) return;
+  if (!immediate) {
+    if (snapshotDebounceTimer) clearTimeout(snapshotDebounceTimer);
+    snapshotDebounceTimer = setTimeout(() => {
+      snapshotDebounceTimer = null;
+      pushLocalStorageSnapshotToDisk(true);
+    }, 1800);
+    return;
+  }
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
     const snapshot = {};
@@ -43,12 +71,16 @@ function pushLocalStorageSnapshotToDisk() {
 }
 
 syncLocalStorageWithDiskOnBoot();
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && isMainOperatorView()) {
   window.addEventListener('DOMContentLoaded', () => {
-    pushLocalStorageSnapshotToDisk();
+    pushLocalStorageSnapshotToDisk(false);
   });
   window.addEventListener('beforeunload', () => {
-    pushLocalStorageSnapshotToDisk();
+    if (snapshotDebounceTimer) {
+      clearTimeout(snapshotDebounceTimer);
+      snapshotDebounceTimer = null;
+    }
+    pushLocalStorageSnapshotToDisk(true);
   });
 }
 
@@ -84,6 +116,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, state) => callback(state);
     ipcRenderer.on('broadcast-update', handler);
     return () => ipcRenderer.removeListener('broadcast-update', handler);
+  },
+  sendMediaEnded: (url) => ipcRenderer.send('media-ended', url),
+  onMediaEnded: (callback) => {
+    const handler = (_event, url) => callback(url);
+    ipcRenderer.on('media-ended', handler);
+    return () => ipcRenderer.removeListener('media-ended', handler);
   },
   isAudienceOpen: () => ipcRenderer.invoke('is-audience-open'),
   onAudienceStatusChanged: (callback) => {

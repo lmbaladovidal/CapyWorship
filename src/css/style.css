@@ -4518,6 +4518,64 @@ textarea::selection,
   gap: 8px;
 }
 
+.stage-dock-split-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  overflow: hidden;
+}
+
+.stage-folder-tree-sidebar {
+  background: var(--bg-dark);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px 6px;
+}
+
+.stage-folder-tree-sidebar .folder-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stage-dock-search-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-darkest);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0 8px;
+  height: 28px;
+  min-width: 170px;
+}
+
+.stage-dock-search-box input {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 0.72rem;
+  outline: none;
+  width: 100%;
+}
+
+.stage-folder-info-tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
 .btn-stage-import-main {
   background: linear-gradient(135deg, var(--color-brand-orange), var(--color-brand-orange-hover)) !important;
   height: 30px;
@@ -4663,6 +4721,156 @@ textarea::selection,
 
 .stage-video-card.in-queue .stage-card-live-pill {
   left: 36px;
+}
+
+.btn-stage-card-queue {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 5px;
+  background: rgba(9, 14, 26, 0.86);
+  border: 1px solid rgba(255, 174, 66, 0.45);
+  color: #fde68a;
+  font-size: 0.64rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  z-index: 4;
+  transition: all 0.15s ease;
+}
+
+.btn-stage-card-queue:hover {
+  background: rgba(255, 122, 0, 0.9);
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.btn-stage-card-queue.is-queued {
+  background: var(--color-brand-amber);
+  border-color: #fde68a;
+  color: #090e1a;
+  font-weight: 800;
+}
+
+.btn-stage-loop-toggle {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-stage-loop-toggle:hover {
+  border-color: var(--color-brand-amber);
+  color: #ffffff;
+}
+
+.btn-stage-loop-toggle.active {
+  background: rgba(255, 122, 0, 0.22);
+  border-color: var(--color-brand-orange);
+  color: #fde68a;
+  box-shadow: 0 0 10px rgba(255, 122, 0, 0.28);
+}
+
+.stage-main-queue-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  background: rgba(8, 13, 24, 0.75);
+  border: 1px solid rgba(255, 174, 66, 0.35);
+  border-radius: 7px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.stage-queue-strip-title {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--color-brand-amber);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+
+.stage-queue-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  font-size: 0.7rem;
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.14s ease;
+  max-width: 190px;
+}
+
+.stage-queue-chip:hover {
+  border-color: var(--color-brand-amber);
+  background: rgba(255, 174, 66, 0.14);
+}
+
+.stage-queue-chip.is-playing {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: #ef4444;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.stage-queue-chip-num {
+  background: var(--color-brand-orange);
+  color: #ffffff;
+  font-size: 0.63rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.stage-queue-chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stage-queue-chip-remove {
+  background: none;
+  border: none;
+  color: #fca5a5;
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.stage-queue-chip-remove:hover {
+  color: #ef4444;
+}
+
+.btn-stage-next-queue {
+  background: rgba(255, 174, 66, 0.16) !important;
+  border-color: rgba(255, 174, 66, 0.45) !important;
+  color: #fde68a !important;
 }
 
 .stage-card-duration-badge {

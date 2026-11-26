@@ -30,6 +30,9 @@ function getPersistentDbPaths() {
 }
 
 function loadPersistentStorageFromDisk() {
+  if (cachedDiskStorage !== undefined) {
+    return cachedDiskStorage;
+  }
   const candidates = getPersistentDbPaths();
   for (const filePath of candidates) {
     try {
@@ -37,28 +40,32 @@ function loadPersistentStorageFromDisk() {
         const raw = fs.readFileSync(filePath, 'utf8');
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object' && parsed.storage && typeof parsed.storage === 'object') {
-          return parsed.storage;
+          cachedDiskStorage = parsed.storage;
+          return cachedDiskStorage;
         }
       }
     } catch (err) {
       console.warn('[PersistentDB] Error leyendo respaldo en disco:', filePath, err.message);
     }
   }
+  cachedDiskStorage = null;
   return null;
 }
 
 let savePersistentDbTimer = null;
 let pendingPersistentStorage = null;
+let cachedDiskStorage = undefined;
 
-function flushPersistentStorageToDisk(storageSnapshot) {
+function flushPersistentStorageToDiskSync(storageSnapshot) {
   const payloadObj = storageSnapshot || pendingPersistentStorage;
   if (!payloadObj || typeof payloadObj !== 'object') return false;
   pendingPersistentStorage = null;
+  cachedDiskStorage = payloadObj;
   const serialized = JSON.stringify({
     updatedAt: new Date().toISOString(),
     version: app.getVersion(),
     storage: payloadObj
-  }, null, 2);
+  });
 
   for (const filePath of getPersistentDbPaths()) {
     try {
@@ -74,14 +81,38 @@ function flushPersistentStorageToDisk(storageSnapshot) {
   return true;
 }
 
+async function flushPersistentStorageToDiskAsync(storageSnapshot) {
+  const payloadObj = storageSnapshot || pendingPersistentStorage;
+  if (!payloadObj || typeof payloadObj !== 'object') return false;
+  pendingPersistentStorage = null;
+  cachedDiskStorage = payloadObj;
+  const serialized = JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    version: app.getVersion(),
+    storage: payloadObj
+  });
+
+  for (const filePath of getPersistentDbPaths()) {
+    try {
+      const dir = path.dirname(filePath);
+      await fs.promises.mkdir(dir, { recursive: true });
+      await fs.promises.writeFile(filePath, serialized, 'utf8');
+    } catch (err) {
+      console.warn('[PersistentDB] No se pudo escribir respaldo async en:', filePath, err.message);
+    }
+  }
+  return true;
+}
+
 function scheduleSavePersistentStorage(storageSnapshot) {
   if (!storageSnapshot || typeof storageSnapshot !== 'object') return;
   pendingPersistentStorage = storageSnapshot;
+  cachedDiskStorage = storageSnapshot;
   if (savePersistentDbTimer) clearTimeout(savePersistentDbTimer);
   savePersistentDbTimer = setTimeout(() => {
     savePersistentDbTimer = null;
-    flushPersistentStorageToDisk();
-  }, 350);
+    flushPersistentStorageToDiskAsync();
+  }, 1200);
 }
 
 let presentationImporter = null;
@@ -179,7 +210,7 @@ function revealMainWindow() {
     splashFallbackTimer = null;
   }
 
-  const MIN_SPLASH_MS = 2000;
+  const MIN_SPLASH_MS = 350;
   const elapsed = splashShownAt ? Date.now() - splashShownAt : 0;
   const waitMs = Math.max(0, MIN_SPLASH_MS - elapsed);
 
@@ -209,8 +240,8 @@ function revealMainWindow() {
         if (hasSecondaryDisplay) {
           openAudienceWindow();
         }
-      }, 320);
-    }, 480);
+      }, 140);
+    }, 120);
   }, waitMs);
 }
 
@@ -848,6 +879,12 @@ ipcMain.on('broadcast-update', (event, state) => {
   }
 });
 
+ipcMain.on('media-ended', (_event, url) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('media-ended', url || '');
+  }
+});
+
 ipcMain.handle('get-app-settings', () => appSettings);
 ipcMain.handle('get-audience-server-info', () => (localAudienceServer ? localAudienceServer.getInfo() : null));
 
@@ -914,7 +951,7 @@ app.on('will-quit', () => {
     savePersistentDbTimer = null;
   }
   if (pendingPersistentStorage) {
-    flushPersistentStorageToDisk();
+    flushPersistentStorageToDiskSync();
   }
   if (localAudienceServer) {
     localAudienceServer.stop();
