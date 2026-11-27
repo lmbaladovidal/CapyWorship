@@ -400,10 +400,10 @@ export class Store {
     const savedStageSecLib = getStorageItem("propresenter_stage_secondary_library");
 
     this.state = {
-      // Proyección Live
-      activeVideoUrl: "https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-background-1610-large.mp4",
-      activeVideoTitle: "Space Motion Background",
-      activeVideoName: "Space Stars Motion",
+      // Proyección Live (Sin fondo preseleccionado al abrir: solo se asigna cuando el operador lo selecciona)
+      activeVideoUrl: "",
+      activeVideoTitle: "",
+      activeVideoName: "",
       activeMediaPlayId: 1,
       liveText: "",
       liveSlideImage: "",
@@ -888,7 +888,7 @@ export class Store {
   }
 
   setLiveScripture(text) {
-    this.deactivateStageMedia(false);
+    // Importante: proyectar un versículo NO debe cambiar ni desactivar el fondo activo (ni de Media ni de Combinación)
     this.state.liveContentType = "scripture";
     this.state.liveText = text;
     this.state.liveSlideImage = "";
@@ -913,7 +913,7 @@ export class Store {
     const slide = group.slides[slideIndex];
     if (!slide) return;
 
-    this.deactivateStageMedia(false);
+    // Importante: proyectar una letra o diapositiva de Show NO debe cambiar ni desactivar el fondo activo (ni de Media ni de Combinación)
 
     if (slide.isLowerThird) {
       const parts = slide.text.split("\n");
@@ -2281,6 +2281,16 @@ export class Store {
     this.state.stageQueueFinished = false;
     this.state.isMediaPaused = false;
     this.state.mediaPlaybackCommand = null;
+    this.state.isMediaCleared = false;
+
+    // Al activar una combinación de fondos, deseleccionar cualquier fondo individual previo de la galería Media
+    // para que al volver a Shows no quede ningún video individual seleccionado ni pise la combinación al proyectar letras.
+    this.state.activeVideoUrl = "";
+    this.state.activeVideoName = "";
+    this.state.activeVideoTitle = "";
+    this.state.activeVideoType = "";
+    this.state.activeVideoIsImage = false;
+    this.state.mediaQueue = [];
 
     const mainIsImg = Boolean(
       firstMainItem.isImage ||

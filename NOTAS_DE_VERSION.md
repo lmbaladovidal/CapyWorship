@@ -13,7 +13,10 @@ Esta actualización menor (**v3.1.0**) incorpora mejoras clave de usabilidad y c
 #### 🎛️ Módulo "Combinación" con Estructura en Árbol de Carpetas
 - **Pestaña Superior `Combinación`:** El botón superior `Stage` pasa a llamarse **`Combinación`**, reflejando su función de combinar contenidos independientes entre la **Salida 1 — Pantalla Principal (Audiencia)** y la **Salida 2 — Pantalla Secundaria (Columnas)**.
 - **Árbol de Carpetas en Ambos Docks:** Tanto el dock superior como el inferior ahora cuentan con el panel lateral de **Carpetas de Medios** (Carpetas Virtuales y Carpetas Físicas `LIVE` en disco) idéntico a la vista normal, evitando mezclar todos los videos en una sola lista plana y permitiendo filtrar y buscar dentro de la carpeta seleccionada en cada salida de manera independiente.
-- **Control Directo de Columnas:** El botón de activación de la segunda salida nativa en la barra superior pasa a llamarse **"Encender Columnas" / "Apagar Columnas"** para mayor claridad operativa.
+- **Uso Simultáneo de Combinación de Fondos y Shows / Letras:**
+  - Al enviar una combinación de fondos (**Salida 1 Principal + Salida 2 Columnas**) y volver a la vista **`Show`**, se deselecciona cualquier video individual previo en la galería *Media*.
+  - Proyectar letras de canciones, diapositivas de presentaciones, overlays o versículos bíblicos **no cambia ni desactiva los fondos combinados**: las letras se proyectan directamente sobre el fondo activo de la Pantalla Principal mientras las Columnas mantienen su fondo independiente.
+  - El fondo solo cambia cuando el operador selecciona explícitamente un nuevo video/imagen en *Media*, envía una nueva combinación o limpia el fondo (`F3` / `Clear All`).
 
 #### 🔁 Colas de Reproducción Mejoradas y Botón "Loop Principal: ON / OFF" en Combinación
 - **Armado Intuitivo de Colas (`+ Cola`, `Alt + Click`, `Ctrl + Click`, `Shift + Click`):**

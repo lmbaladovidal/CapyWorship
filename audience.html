@@ -269,30 +269,130 @@
     sync.onUpdate((state) => {
       isBackgroundForceHidden = isForceTransparentByUrl || Boolean(state.forceTransparentBackground);
 
-      // MODO STAGE: Reproductor Dual Sincronizado (prioridad sobre shows, letras, placas y fondos)
+      // 0. Active Template Typography & Layout Styles
+      if (state.activeTemplate) {
+        const tpl = state.activeTemplate;
+        const baseFontSize = tpl.fontSize || 52;
+        const baseLetterSpacing = tpl.letterSpacing || 0;
+        const basePadding = tpl.padding || 0;
+        const baseRadius = tpl.borderRadius || 0;
+
+        textEl.style.fontFamily = tpl.fontFamily || 'Inter, sans-serif';
+        textEl.style.fontSize = `calc(${baseFontSize} * 0.0521vw)`;
+        textEl.style.fontWeight = tpl.fontWeight || '700';
+        textEl.style.fontStyle = tpl.fontStyle || 'normal';
+        textEl.style.textDecoration = tpl.textDecoration || 'none';
+        textEl.style.textTransform = tpl.textTransform || 'none';
+        textEl.style.webkitTextStroke = tpl.webkitTextStroke || (tpl.outlineEnable ? `${tpl.outlineWidth || 2}px ${tpl.outlineColor || '#000000'}` : 'none');
+        textEl.style.letterSpacing = `calc(${baseLetterSpacing} * 0.0521vw)`;
+        textEl.style.lineHeight = tpl.lineHeight || 1.25;
+        textEl.style.color = tpl.color || '#ffffff';
+        textEl.style.textShadow = tpl.textShadow || '0 4px 16px rgba(0,0,0,0.8)';
+        textEl.style.textAlign = tpl.textAlign || 'center';
+        textEl.style.backgroundColor = tpl.bgColor || 'transparent';
+        textEl.style.padding = `calc(${basePadding} * 0.025vw) calc(${basePadding} * 0.045vw)`;
+        textEl.style.borderRadius = `calc(${baseRadius} * 0.04vw)`;
+
+        // Vertical Position Y
+        textEl.style.position = 'absolute';
+        textEl.style.left = '5%';
+        textEl.style.right = '5%';
+        textEl.style.top = (tpl.posY || 50) + '%';
+        textEl.style.transform = 'translateY(-50%)';
+
+        // Max lines clamp
+        if (tpl.maxLines && tpl.maxLines > 0) {
+          textEl.style.display = '-webkit-box';
+          textEl.style['-webkit-line-clamp'] = tpl.maxLines;
+          textEl.style['-webkit-box-orient'] = 'vertical';
+          textEl.style.overflow = 'hidden';
+        } else {
+          textEl.style.display = 'block';
+          textEl.style.overflow = 'visible';
+        }
+      }
+
+      const dur = state.fadeDuration || 250;
+      const halfDur = Math.round(dur * 0.48);
+
+      // Configure Transition Timing (Cut vs Fade with dynamic duration 100ms-1000ms)
+      if (state.textTransition === 'cut') {
+        textEl.style.transition = 'opacity 0s, transform 0s';
+      } else {
+        textEl.style.transition = `opacity ${halfDur}ms ease-in-out, transform ${halfDur}ms ease-in-out`;
+      }
+
+      // 1. Presentation Slide Image Layer (PPTX / PDF) + Text Layer (Se renderizan siempre sobre el fondo activo, sea de Media o de Combinación)
+      const targetSlideImage = (!state.isTextCleared && state.liveSlideImage) ? state.liveSlideImage : "";
+      const slideTransCss = state.textTransition === 'cut' ? 'opacity 0s' : `opacity ${dur}ms ease-in-out`;
+
+      if (!targetSlideImage) {
+        if (currentSlideImageUrl) {
+          slideImgA.style.transition = slideTransCss;
+          slideImgB.style.transition = slideTransCss;
+          slideImgA.style.opacity = '0';
+          slideImgB.style.opacity = '0';
+          currentSlideImageUrl = "";
+        }
+      } else if (targetSlideImage !== currentSlideImageUrl) {
+        currentSlideImageUrl = targetSlideImage;
+        const incomingSlide = activeSlideImgLayer === 'A' ? slideImgB : slideImgA;
+        const outgoingSlide = activeSlideImgLayer === 'A' ? slideImgA : slideImgB;
+        activeSlideImgLayer = activeSlideImgLayer === 'A' ? 'B' : 'A';
+
+        incomingSlide.style.transition = slideTransCss;
+        outgoingSlide.style.transition = slideTransCss;
+        incomingSlide.src = targetSlideImage;
+        incomingSlide.style.opacity = '1';
+        outgoingSlide.style.opacity = '0';
+      }
+
+      const targetText = (state.isTextCleared || targetSlideImage || !state.liveText) ? "" : state.liveText;
+
+      if (!targetText) {
+        textEl.classList.add('cleared');
+        textEl.style.opacity = '0';
+        currentLiveText = "";
+      } else if (targetText !== currentLiveText) {
+        const formattedHTML = targetText.replace(/\n/g, '<br/>');
+
+        if (state.textTransition === 'fade' && currentLiveText && !textEl.classList.contains('cleared')) {
+          textEl.style.opacity = '0';
+          if (fadeTimeout) clearTimeout(fadeTimeout);
+          fadeTimeout = setTimeout(() => {
+            textEl.innerHTML = formattedHTML;
+            textEl.classList.remove('cleared');
+            textEl.style.opacity = '1';
+          }, halfDur);
+        } else {
+          if (fadeTimeout) clearTimeout(fadeTimeout);
+          textEl.innerHTML = formattedHTML;
+          textEl.classList.remove('cleared');
+          textEl.style.opacity = '1';
+        }
+        currentLiveText = targetText;
+      }
+
+      // 3. Lower Third Overlay Layer
+      if (!state.isOverlayCleared && state.isLowerThirdActive) {
+        ltTitle.textContent = state.lowerThirdText;
+        ltSub.textContent = state.lowerThirdSubtext;
+        ltBanner.classList.add('active');
+      } else {
+        ltBanner.classList.remove('active');
+      }
+
+      // 2. Capa de Fondo Multimedia: Combinación (stageMedia.mainVideo) o Fondo Individual (activeVideoUrl)
       const stageMedia = (state && state.stageMedia && state.stageMedia.active) ? state.stageMedia : null;
-      if (stageMedia) {
+      if (stageMedia && !isBackgroundForceHidden && !state.isMediaCleared) {
         isStageMediaActive = true;
         currentVideoUrl = "";
         currentMediaPlayId = 0;
 
-        // Ocultar textos, letras, placas y overlays habituales
-        if (fadeTimeout) clearTimeout(fadeTimeout);
         if (window.audienceMediaFadeTimeout) {
           clearTimeout(window.audienceMediaFadeTimeout);
           window.audienceMediaFadeTimeout = null;
         }
-        textEl.classList.add('cleared');
-        textEl.style.opacity = '0';
-        currentLiveText = "";
-        slideImgA.style.opacity = '0';
-        slideImgB.style.opacity = '0';
-        currentSlideImageUrl = "";
-        ltBanner.classList.remove('active');
-        bgImgA.style.opacity = '0';
-        bgImgB.style.opacity = '0';
-        bgImgA.style.display = 'none';
-        bgImgB.style.display = 'none';
 
         const isAudioMuted = !!state.isMediaAudioMuted;
         const audioVolume = typeof state.mediaAudioVolume === 'number' ? state.mediaAudioVolume : 1.0;
@@ -322,7 +422,7 @@
         const incomingPlayInstanceId = stageMedia.playInstanceId || stageMedia.syncTimestamp || 0;
 
         if (!mainSrc) {
-          // Fin de la cola o sin medio principal activo -> pantalla principal en negro limpio
+          // Fin de la cola o sin medio principal activo -> fondo en negro limpio (conservando letras si las hubiera)
           mediaOperationToken++;
           bgVideoA.style.transition = 'opacity 250ms ease-in-out';
           bgVideoB.style.transition = 'opacity 250ms ease-in-out';
@@ -358,6 +458,7 @@
           outgoingMedia.video.pause();
           outgoingMedia.video.style.opacity = '0';
           outgoingMedia.img.style.opacity = '0';
+          outgoingMedia.img.style.display = 'none';
 
           if (mainIsImage) {
             incomingMedia.video.pause();
@@ -412,112 +513,6 @@
         currentStageQueueIdx = -1;
         currentVideoUrl = "";
         currentMediaPlayId = 0;
-      }
-
-      // 0. Active Template Typography & Layout Styles
-      if (state.activeTemplate) {
-        const tpl = state.activeTemplate;
-        const baseFontSize = tpl.fontSize || 52;
-        const baseLetterSpacing = tpl.letterSpacing || 0;
-        const basePadding = tpl.padding || 0;
-        const baseRadius = tpl.borderRadius || 0;
-
-        textEl.style.fontFamily = tpl.fontFamily || 'Inter, sans-serif';
-        textEl.style.fontSize = `calc(${baseFontSize} * 0.0521vw)`;
-        textEl.style.fontWeight = tpl.fontWeight || '700';
-        textEl.style.fontStyle = tpl.fontStyle || 'normal';
-        textEl.style.textDecoration = tpl.textDecoration || 'none';
-        textEl.style.textTransform = tpl.textTransform || 'none';
-        textEl.style.webkitTextStroke = tpl.webkitTextStroke || (tpl.outlineEnable ? `${tpl.outlineWidth || 2}px ${tpl.outlineColor || '#000000'}` : 'none');
-        textEl.style.letterSpacing = `calc(${baseLetterSpacing} * 0.0521vw)`;
-        textEl.style.lineHeight = tpl.lineHeight || 1.25;
-        textEl.style.color = tpl.color || '#ffffff';
-        textEl.style.textShadow = tpl.textShadow || '0 4px 16px rgba(0,0,0,0.8)';
-        textEl.style.textAlign = tpl.textAlign || 'center';
-        textEl.style.backgroundColor = tpl.bgColor || 'transparent';
-        textEl.style.padding = `calc(${basePadding} * 0.025vw) calc(${basePadding} * 0.045vw)`;
-        textEl.style.borderRadius = `calc(${baseRadius} * 0.04vw)`;
-
-        // Vertical Position Y
-        textEl.style.position = 'absolute';
-        textEl.style.left = '5%';
-        textEl.style.right = '5%';
-        textEl.style.top = (tpl.posY || 50) + '%';
-        textEl.style.transform = 'translateY(-50%)';
-
-        // Max lines clamp
-        if (tpl.maxLines && tpl.maxLines > 0) {
-          textEl.style.display = '-webkit-box';
-          textEl.style['-webkit-line-clamp'] = tpl.maxLines;
-          textEl.style['-webkit-box-orient'] = 'vertical';
-          textEl.style.overflow = 'hidden';
-        } else {
-          textEl.style.display = 'block';
-          textEl.style.overflow = 'visible';
-        }
-      }
-
-      const dur = state.fadeDuration || 250;
-      const halfDur = Math.round(dur * 0.48);
-
-      // Configure Transition Timing (Cut vs Fade with dynamic duration 100ms-1000ms)
-      if (state.textTransition === 'cut') {
-        textEl.style.transition = 'opacity 0s, transform 0s';
-      } else {
-        textEl.style.transition = `opacity ${halfDur}ms ease-in-out, transform ${halfDur}ms ease-in-out`;
-      }
-
-      // 1. Presentation Slide Image Layer (PPTX / PDF) + Text Layer
-      const targetSlideImage = (!state.isTextCleared && state.liveSlideImage) ? state.liveSlideImage : "";
-      const slideTransCss = state.textTransition === 'cut' ? 'opacity 0s' : `opacity ${dur}ms ease-in-out`;
-
-      if (!targetSlideImage) {
-        if (currentSlideImageUrl) {
-          slideImgA.style.transition = slideTransCss;
-          slideImgB.style.transition = slideTransCss;
-          slideImgA.style.opacity = '0';
-          slideImgB.style.opacity = '0';
-          currentSlideImageUrl = "";
-        }
-      } else if (targetSlideImage !== currentSlideImageUrl) {
-        currentSlideImageUrl = targetSlideImage;
-        const incomingSlide = activeSlideImgLayer === 'A' ? slideImgB : slideImgA;
-        const outgoingSlide = activeSlideImgLayer === 'A' ? slideImgA : slideImgB;
-        activeSlideImgLayer = activeSlideImgLayer === 'A' ? 'B' : 'A';
-
-        incomingSlide.style.transition = slideTransCss;
-        outgoingSlide.style.transition = slideTransCss;
-        incomingSlide.src = targetSlideImage;
-        incomingSlide.style.opacity = '1';
-        outgoingSlide.style.opacity = '0';
-      }
-
-      const targetText = (state.isTextCleared || targetSlideImage || !state.liveText) ? "" : state.liveText;
-
-      if (!targetText) {
-        textEl.classList.add('cleared');
-        textEl.style.opacity = '0';
-        currentLiveText = "";
-      } else if (targetText !== currentLiveText) {
-        const formattedHTML = targetText.replace(/\n/g, '<br/>');
-
-        if (state.textTransition === 'fade' && currentLiveText && !textEl.classList.contains('cleared')) {
-          // Slide-to-slide crossfade: Fade out halfDur -> Swap text -> Fade in
-          textEl.style.opacity = '0';
-          if (fadeTimeout) clearTimeout(fadeTimeout);
-          fadeTimeout = setTimeout(() => {
-            textEl.innerHTML = formattedHTML;
-            textEl.classList.remove('cleared');
-            textEl.style.opacity = '1';
-          }, halfDur);
-        } else {
-          // Immediate swap for 'cut' mode or first slide
-          if (fadeTimeout) clearTimeout(fadeTimeout);
-          textEl.innerHTML = formattedHTML;
-          textEl.classList.remove('cleared');
-          textEl.style.opacity = '1';
-        }
-        currentLiveText = targetText;
       }
 
       // 2. Video / Media Background Layer (Dual Layer Crossfade for Videos & Images)

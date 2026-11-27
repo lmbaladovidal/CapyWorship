@@ -1320,12 +1320,25 @@ test('RF-66: Docks superior/inferior, cola Alt+Click, disparo simultáneo stageM
     throw new Error('Al terminar el último video de la cola sin loop, mainVideo debe quedar en null y stageQueueFinished en true.');
   }
 
-  // 6. Proyectar una canción, versículo o activar Blackout desactiva stageMedia.active = false
+  // 6. Usar Combinación y Shows al mismo tiempo: proyectar una letra o versículo NO debe cambiar ni desactivar la combinación de fondos
   store.dispatchStageToScreens();
   if (!store.state.stageMedia.active) throw new Error('stageMedia debería estar activo tras nuevo disparo.');
+  if (store.state.activeVideoUrl !== "") {
+    throw new Error('Al activar una combinación de fondos y volver a Shows, no debe quedar ningún video individual seleccionado en activeVideoUrl.');
+  }
   store.setLiveSlide(0, 0);
-  if (store.state.stageMedia.active !== false) {
-    throw new Error('Proyectar una diapositiva de canción/show debe desactivar stageMedia.active = false.');
+  if (store.state.stageMedia.active !== true || store.state.activeVideoUrl !== "") {
+    throw new Error('Proyectar una diapositiva de canción/show debe mantener la combinación de fondos activa sin asignar otro video.');
+  }
+  store.setLiveScripture('Juan 3:16 - Porque de tal manera amó Dios al mundo...');
+  if (store.state.stageMedia.active !== true || store.state.activeVideoUrl !== "") {
+    throw new Error('Proyectar un versículo debe mantener la combinación de fondos activa sin cambiar el fondo.');
+  }
+
+  // Solo al seleccionar explícitamente un nuevo fondo en Media o activar Blackout se reemplaza/limpia la combinación
+  store.setActiveVideo('file:///C:/media/nuevo-fondo.mp4', 'Nuevo Fondo');
+  if (store.state.stageMedia.active !== false || store.state.activeVideoUrl !== 'file:///C:/media/nuevo-fondo.mp4') {
+    throw new Error('Seleccionar explícitamente un nuevo fondo en Media debe asignar ese fondo y desactivar stageMedia.');
   }
 
   store.dispatchStageToScreens();

@@ -5281,7 +5281,7 @@ class ProPresenterApp {
         }
       } else {
         this.mediaGridEl.innerHTML = filteredMedia.map(item => {
-          const isActive = state.activeVideoUrl === item.url && !state.isMediaCleared;
+          const isActive = !state.stageMedia?.active && Boolean(state.activeVideoUrl) && state.activeVideoUrl === item.url && !state.isMediaCleared;
           const isImg = (item.type && item.type.startsWith('image/')) || (item.url && item.url.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?)/i));
           
           const thumbSrc = item.thumbnail || (isImg ? item.url : '');
@@ -5433,7 +5433,7 @@ class ProPresenterApp {
     // 3. Fast CSS active class update without DOM destruction
     this.mediaGridEl.querySelectorAll('.video-card').forEach(card => {
       const url = card.getAttribute('data-video-url');
-      const isActive = state.activeVideoUrl === url && !state.isMediaCleared;
+      const isActive = !state.stageMedia?.active && Boolean(state.activeVideoUrl) && state.activeVideoUrl === url && !state.isMediaCleared;
       card.classList.toggle('active-video', isActive);
     });
 
@@ -7238,10 +7238,8 @@ class ProPresenterApp {
       this.renderStageDualView(state);
     }
 
-    const isStageModePlaying = Boolean(state.stageMedia && state.stageMedia.active);
-
-    // 5. Presentation Slide Image + Text & Stage Previews (Escalado equivalente e idéntico a la pantalla de Audiencia)
-    const targetSlideImage = (!isStageModePlaying && !state.isTextCleared && state.liveSlideImage) ? state.liveSlideImage : "";
+    // 5. Presentation Slide Image + Text & Stage Previews (Escalado equivalente e idéntico a la pantalla de Audiencia: letras y shows conviven sobre el fondo activo o la combinación)
+    const targetSlideImage = (!state.isTextCleared && state.liveSlideImage) ? state.liveSlideImage : "";
     const operatorSlideImgEl = document.getElementById('operator-slide-img-preview');
     if (operatorSlideImgEl) {
       operatorSlideImgEl.style.transition = state.textTransition === 'cut' ? 'opacity 0s' : `opacity ${dur}ms ease-in-out`;
@@ -7257,7 +7255,7 @@ class ProPresenterApp {
       }
     }
 
-    const targetText = (isStageModePlaying || state.isTextCleared || targetSlideImage || !state.liveText) ? "" : state.liveText;
+    const targetText = (state.isTextCleared || targetSlideImage || !state.liveText) ? "" : state.liveText;
     const operatorTextWrapper = document.getElementById('operator-live-text-wrapper');
 
     if (!targetText) {
